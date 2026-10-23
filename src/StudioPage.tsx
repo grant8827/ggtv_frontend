@@ -1,5 +1,4 @@
 import { useEffect, useRef, useState } from 'react'
-import { Link } from 'react-router-dom'
 import {
   AlertTriangle,
   Camera,
@@ -10,6 +9,7 @@ import {
   MonitorUp,
   Radio,
   RadioTower,
+  RefreshCw,
   ScreenShare,
   Signal,
   SkipForward,
@@ -17,17 +17,8 @@ import {
   Video,
   X,
 } from 'lucide-react'
-import { api, type Playlist } from './api'
-import { createPlaylistPlayer, type PlaylistPlayer } from './studio/playlistPlayer'
-import { drawProgram, OUTPUT_HEIGHT, OUTPUT_WIDTH, type ProgramScene, type Source, type Transition } from './studio/programCompositor'
-import { useSwitcherOutput } from './studio/useSwitcherOutput'
-
-const initialSources: Source[] = [
-  { id: 'bars', name: 'COLOR BARS', kind: 'pattern' },
-  { id: 'camera-1', name: 'CAMERA 01', kind: 'camera' },
-  { id: 'screen-1', name: 'SCREEN SHARE', kind: 'screen' },
-  { id: 'feed-2', name: 'INPUT 04', kind: 'media' },
-]
+import { OUTPUT_HEIGHT, OUTPUT_WIDTH, type Source } from './studio/programCompositor'
+import { useSwitcher } from './studio/switcherContext'
 
 const OUTPUT_LABELS = { idle: 'OUTPUT OFF', connecting: 'CONNECTING', streaming: 'SENDING TO ORIGIN', error: 'OUTPUT ERROR' }
 
@@ -70,6 +61,8 @@ function PreviewMonitor({ source }: { source: Source }) {
           <canvas ref={canvasRef} width={640} height={360} aria-label={`${source.name} source`} />
         ) : source.stream ? (
           <video ref={videoRef} autoPlay muted playsInline aria-label={`${source.name} source`} />
+        ) : source.offline ? (
+          <div className="offline-slate">{source.name} · OFFLINE</div>
         ) : (
           <div className={`test-pattern ${source.kind}`} />
         )}
@@ -80,136 +73,36 @@ function PreviewMonitor({ source }: { source: Source }) {
   )
 }
 
-function StudioPage() {
-  const [sources, setSources] = useState(initialSources)
-  const [previewId, setPreviewId] = useState('bars')
-  const [programId, setProgramId] = useState('bars')
-  const [transition, setTransition] = useState('CUT')
-  const [duration, setDuration] = useState(350)
-  const [isBlack, setIsBlack] = useState(false)
-  const [lowerTitle, setLowerTitle] = useState('LIVE FROM GGTV')
-  const [lowerDetail, setLowerDetail] = useState('Broadcast control room')
-  const [ticker, setTicker] = useState('WELCOME TO GGTV LIVE')
-  const [lowerOnAir, setLowerOnAir] = useState(false)
-  const [tickerOnAir, setTickerOnAir] = useState(false)
-  const [message, setMessage] = useState('Load a source to preview, then TAKE it to program.')
-  const streams = useRef<MediaStream[]>([])
-  const videos = useRef(new Map<string, HTMLVideoElement>())
-  const programCanvas = useRef<HTMLCanvasElement>(null)
-  const scene = useRef<ProgramScene | null>(null)
-  const activeTransition = useRef<Transition | null>(null)
-  const output = useSwitcherOutput(programCanvas)
-  const { attachAudio, detachAudio, setProgramAudio } = output
-  const players = useRef(new Map<string, PlaylistPlayer>())
-  const [playlists, setPlaylists] = useState<Playlist[]>([])
-  const [playlistId, setPlaylistId] = useState('')
-  const [playerStatus, setPlayerStatus] = useState<Record<string, { text: string; isError?: boolean }>>({})
-  const previewSource = sources.find((source) => source.id === previewId) ?? sources[0]
-  const programSource = sources.find((source) => source.id === programId) ?? sources[0]
-  const loadedPlaylists = sources.filter((source) => source.element)
+// Shows the studio-wide PROGRAM canvas; it keeps drawing (and sending) when this page is closed.
+function ProgramMonitor() {
+  const { programCanvas, programSource, isBlack } = useSwitcher()
+  const slot = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
-    scene.current = {
-      source: programSource,
-      lowerThird: lowerOnAir ? { title: lowerTitle, detail: lowerDetail } : null,
-      ticker: tickerOnAir ? ticker : '',
-      black: isBlack,
-    }
-  })
-
-  useEffect(() => {
-    const context = programCanvas.current?.getContext('2d')
-    if (!context) return
-    // A timer rather than requestAnimationFrame, which stops entirely in background tabs.
-    const timer = window.setInterval(() => {
-      if (scene.current) drawProgram(context, scene.current, activeTransition.current, videos.current, performance.now())
-    }, 1000 / 30)
-    return () => window.clearInterval(timer)
-  }, [])
-
-  useEffect(() => {
-    api<Playlist[]>('/studio/playlists').then(setPlaylists).catch(() => undefined)
-  }, [])
-
-  useEffect(() => {
-    setProgramAudio(programId)
-  }, [programId, setProgramAudio])
-
-  useEffect(() => {
-    const ownedPlayers = players.current
-    const ownedVideos = videos.current
-    const ownedStreams = streams.current
+    const container = slot.current
+    if (!container) return
+    container.appendChild(programCanvas)
     return () => {
-      ownedStreams.forEach((stream) => stream.getTracks().forEach((track) => track.stop()))
-      ownedVideos.forEach((video) => { video.srcObject = null })
-      ownedPlayers.forEach((player) => player.destroy())
+      programCanvas.remove()
     }
-  }, [])
+  }, [programCanvas])
 
-  function loadPlaylist() {
-    const playlist = playlists.find((item) => item.id === playlistId)
-    if (!playlist) {
-      setMessage('Choose a playlist to load.')
-      return
-    }
-    const id = `playlist-${Date.now()}`
-    const player = createPlaylistPlayer(playlist, (text, isError) => {
-      setPlayerStatus((current) => ({ ...current, [id]: { text, isError } }))
-    })
-    players.current.set(id, player)
-    videos.current.set(id, player.video)
-    attachAudio(id, player.video)
-    setSources((current) => [...current, { id, name: playlist.name.toUpperCase(), kind: 'media', element: player.video }])
-    setPreviewId(id)
-    setMessage(`Playlist "${playlist.name}" loaded to preview. TAKE it to put it on program.`)
-  }
+  return (
+    <section className="monitor-panel program">
+      <div className="monitor-header"><span>PROGRAM</span><small>PGM 01 · {OUTPUT_WIDTH}×{OUTPUT_HEIGHT}</small></div>
+      <div className="monitor-screen" ref={slot} />
+      <p className="monitor-source">SOURCE: {programSource.name}{isBlack ? ' · BLACK' : ''}</p>
+    </section>
+  )
+}
 
-  function removeSource(id: string) {
-    players.current.get(id)?.destroy()
-    players.current.delete(id)
-    videos.current.delete(id)
-    detachAudio(id)
-    setSources((current) => current.filter((source) => source.id !== id))
-    if (previewId === id) setPreviewId('bars')
-    if (programId === id) setProgramId('bars')
-  }
-
-  async function addCapture(kind: 'camera' | 'screen') {
-    try {
-      const stream = kind === 'camera'
-        ? await navigator.mediaDevices.getUserMedia({ video: { width: 1280, height: 720 }, audio: false })
-        : await navigator.mediaDevices.getDisplayMedia({ video: true, audio: false })
-      const source: Source = {
-        id: `${kind}-${Date.now()}`,
-        name: kind === 'camera' ? 'CAMERA CAPTURE' : 'DESKTOP CAPTURE',
-        kind,
-        stream,
-      }
-      // The program canvas draws from its own muted video element for each captured source.
-      const video = document.createElement('video')
-      video.muted = true
-      video.playsInline = true
-      video.srcObject = stream
-      void video.play().catch(() => undefined)
-      videos.current.set(source.id, video)
-      streams.current.push(stream)
-      setSources((current) => [...current, source])
-      setPreviewId(source.id)
-      setMessage(`${source.name} added to preview.`)
-    } catch {
-      setMessage(`${kind === 'camera' ? 'Camera' : 'Screen capture'} was cancelled or unavailable.`)
-    }
-  }
-
-  function takeProgram() {
-    if (previewId === programId) return
-    activeTransition.current = transition === 'CUT' || duration === 0
-      ? null
-      : { from: programSource, mode: transition, start: performance.now(), duration }
-    setProgramId(previewId)
-    setIsBlack(false)
-    setMessage(`${transition} to ${previewSource.name}.`)
-  }
+function StudioPage() {
+  const switcher = useSwitcher()
+  const { output, live, sources, previewSource, programSource } = switcher
+  const [playlistId, setPlaylistId] = useState('')
+  const loadedPlaylists = sources.filter((source) => source.saved?.kind === 'playlist' && !source.offline)
+  const offlineCount = sources.filter((source) => source.offline).length
+  const sending = output.state === 'streaming'
 
   return (
     <main className="studio-page">
@@ -218,26 +111,33 @@ function StudioPage() {
           <div className="eyebrow"><Radio size={13} /> GGTV STUDIO <span>/</span> SWITCHER</div>
           <h1>Studio switcher</h1>
         </div>
-        <div className={`studio-mode output-${output.state}`}><span className="status-light" /> {OUTPUT_LABELS[output.state]}</div>
+        <div className="heading-badges">
+          {live?.isLive && <div className="on-air-badge live"><span className="status-light" /> ON AIR</div>}
+          <div className={`studio-mode output-${output.state}`}><span className="status-light" /> {OUTPUT_LABELS[output.state]}</div>
+        </div>
       </header>
 
       <section className="control-panel output-panel" aria-label="Program output">
         <div className="output-copy">
           <h2>Program output</h2>
           <p className={output.state === 'error' ? 'output-message error' : 'output-message'} role="status">
-            {output.message || 'Send the PROGRAM monitor to viewers instead of using OBS. Keep this tab open and in front while sending.'}
+            {output.message || '1. Start the output to send PROGRAM to the server. 2. Go live to show it on the home page. It keeps running while you use other studio pages.'}
           </p>
         </div>
         <div className="output-actions">
           <button className={output.micOn ? 'capture-button active' : 'capture-button'} type="button" onClick={() => void output.toggleMic()} aria-pressed={output.micOn}>
             {output.micOn ? <Mic size={14} /> : <MicOff size={14} />} {output.micOn ? 'MIC ON' : 'MIC OFF'}
           </button>
-          {output.state === 'streaming' || output.state === 'connecting' ? (
-            <button className="button button-danger" type="button" onClick={output.stop}><Square size={13} /> STOP OUTPUT</button>
+          {sending || output.state === 'connecting' ? (
+            <button className="button button-muted" type="button" onClick={output.stop}><Square size={13} /> STOP OUTPUT</button>
           ) : (
-            <button className="button button-primary" type="button" onClick={() => void output.start()}><RadioTower size={14} /> START OUTPUT</button>
+            <button className="button button-dark" type="button" onClick={() => void output.start()}><RadioTower size={14} /> START OUTPUT</button>
           )}
-          {output.state === 'streaming' && <Link className="text-link" to="/studio/live">GO LIVE PAGE ↗</Link>}
+          {live?.isLive ? (
+            <button className="button button-danger" type="button" onClick={() => void switcher.endBroadcast()} disabled={switcher.liveBusy}><Square size={13} /> END BROADCAST</button>
+          ) : (
+            <button className="button button-primary" type="button" onClick={() => void switcher.goLive()} disabled={switcher.liveBusy || !live}><RadioTower size={14} /> GO LIVE</button>
+          )}
         </div>
       </section>
 
@@ -245,106 +145,112 @@ function StudioPage() {
 
       <div className="monitor-grid">
         <PreviewMonitor source={previewSource} />
-        <section className="monitor-panel program">
-          <div className="monitor-header"><span>PROGRAM</span><small>PGM 01 · {OUTPUT_WIDTH}×{OUTPUT_HEIGHT}</small></div>
-          <div className="monitor-screen">
-            <canvas ref={programCanvas} width={OUTPUT_WIDTH} height={OUTPUT_HEIGHT} aria-label={`Program output: ${programSource.name}`} />
-          </div>
-          <p className="monitor-source">SOURCE: {programSource.name}{isBlack ? ' · BLACK' : ''}</p>
-        </section>
+        <ProgramMonitor />
       </div>
 
       <section className="switcher-bar" aria-label="Transition controls">
         <div className="transition-options" role="group" aria-label="Transition type">
           {['CUT', 'FADE', 'MERGE', 'WIPE'].map((mode) => (
             <button
-              className={transition === mode ? 'transition-option selected' : 'transition-option'}
+              className={switcher.transition === mode ? 'transition-option selected' : 'transition-option'}
               key={mode}
               type="button"
-              aria-pressed={transition === mode}
-              onClick={() => setTransition(mode)}
+              aria-pressed={switcher.transition === mode}
+              onClick={() => switcher.setTransition(mode)}
             >{mode}</button>
           ))}
         </div>
         <label className="duration-control">DURATION
-          <input type="range" min="0" max="2000" step="50" value={duration} onChange={(event) => setDuration(Number(event.target.value))} />
-          <span className="duration-value">{duration} ms</span>
+          <input type="range" min="0" max="2000" step="50" value={switcher.duration} onChange={(event) => switcher.setDuration(Number(event.target.value))} />
+          <span className="duration-value">{switcher.duration} ms</span>
         </label>
-        <button className="take-button" type="button" onClick={takeProgram}>TAKE <span>↗</span></button>
-        <button className={isBlack ? 'ftb-button active' : 'ftb-button'} type="button" onClick={() => setIsBlack((current) => !current)}>
+        <button className="take-button" type="button" onClick={switcher.takeProgram}>TAKE <span>↗</span></button>
+        <button className={switcher.isBlack ? 'ftb-button active' : 'ftb-button'} type="button" onClick={switcher.toggleBlack}>
           <Square size={13} /> FTB
         </button>
       </section>
 
       <div className="studio-lower-grid">
         <section className="control-panel">
-          <div className="control-panel-heading"><h2>Input bank</h2><span>{sources.length.toString().padStart(2, '0')} SOURCES</span></div>
+          <div className="control-panel-heading"><h2>Input bank</h2><span>{sources.length.toString().padStart(2, '0')} SOURCES · SAVED IN THIS BROWSER</span></div>
           <div className="input-bank">
             {sources.map((source, index) => (
-              <button
-                className={previewId === source.id ? 'input-tile previewing' : 'input-tile'}
-                key={source.id}
-                type="button"
-                onClick={() => { setPreviewId(source.id); setMessage(`${source.name} loaded to preview.`) }}
-                aria-pressed={previewId === source.id}
-              >
-                <span className={`input-art ${source.kind}`}>
-                  {source.kind === 'camera' ? <Camera size={20} /> : source.kind === 'screen' ? <MonitorUp size={20} /> : source.kind === 'media' ? <Video size={20} /> : <Signal size={20} />}
-                </span>
-                <span className="input-label">{String(index + 1).padStart(2, '0')} · {source.name}</span>
-              </button>
+              <div key={source.id} className="input-tile-wrap">
+                <button
+                  className={[
+                    'input-tile',
+                    previewSource.id === source.id ? 'previewing' : '',
+                    programSource.id === source.id ? 'on-program' : '',
+                    source.offline ? 'offline' : '',
+                  ].join(' ')}
+                  type="button"
+                  onClick={() => switcher.selectPreview(source)}
+                  aria-pressed={previewSource.id === source.id}
+                  title={source.offline ? 'Click to reconnect' : undefined}
+                >
+                  <span className={`input-art ${source.kind}`}>
+                    {source.offline ? <RefreshCw size={18} /> : source.kind === 'camera' ? <Camera size={20} /> : source.kind === 'screen' ? <MonitorUp size={20} /> : source.kind === 'media' ? <Video size={20} /> : <Signal size={20} />}
+                  </span>
+                  <span className="input-label">{String(index + 1).padStart(2, '0')} · {source.name}{source.offline ? ' · RECONNECT' : ''}</span>
+                </button>
+                {source.id !== 'bars' && (
+                  <button className="tile-remove" type="button" onClick={() => switcher.removeSource(source)} aria-label={`Remove ${source.name}`}><X size={11} /></button>
+                )}
+              </div>
             ))}
           </div>
           <div className="capture-actions">
-            <button className="capture-button" type="button" onClick={() => void addCapture('camera')}><Camera size={14} /> ADD CAMERA</button>
-            <button className="capture-button" type="button" onClick={() => void addCapture('screen')}><ScreenShare size={14} /> SHARE SCREEN</button>
+            <button className="capture-button" type="button" onClick={() => void switcher.addCapture('camera')}><Camera size={14} /> ADD CAMERA</button>
+            <button className="capture-button" type="button" onClick={() => void switcher.addCapture('screen')}><ScreenShare size={14} /> SHARE SCREEN</button>
+            {offlineCount > 0 && (
+              <button className="capture-button primary" type="button" onClick={() => void switcher.reconnectAll()}><RefreshCw size={14} /> RECONNECT {offlineCount} SAVED</button>
+            )}
           </div>
           <div className="playlist-loader">
             <select className="text-input" aria-label="Playlist to load" value={playlistId} onChange={(event) => setPlaylistId(event.target.value)}>
-              <option value="">{playlists.length ? 'Choose a playlist…' : 'No playlists yet'}</option>
-              {playlists.map((playlist) => <option key={playlist.id} value={playlist.id}>{playlist.name} ({playlist.items.length})</option>)}
+              <option value="">{switcher.playlists.length ? 'Choose a playlist…' : 'No playlists yet'}</option>
+              {switcher.playlists.map((playlist) => <option key={playlist.id} value={playlist.id}>{playlist.name} ({playlist.items.length})</option>)}
             </select>
-            <button className="capture-button" type="button" onClick={loadPlaylist} disabled={!playlistId}><ListVideo size={14} /> LOAD PLAYLIST</button>
+            <button className="capture-button" type="button" onClick={() => switcher.loadPlaylist(playlistId)} disabled={!playlistId}><ListVideo size={14} /> LOAD PLAYLIST</button>
           </div>
           {loadedPlaylists.length > 0 && (
             <ul className="loaded-playlists">
               {loadedPlaylists.map((source) => (
                 <li key={source.id}>
-                  <span className="loaded-name"><strong>{source.name}</strong><small className={playerStatus[source.id]?.isError ? 'error' : ''}>{playerStatus[source.id]?.text ?? 'Loading…'}</small></span>
-                  <button className="dash-icon-button light" type="button" onClick={() => players.current.get(source.id)?.skip()} aria-label={`Skip to the next video in ${source.name}`}><SkipForward size={13} /></button>
-                  <button className="dash-icon-button light danger" type="button" onClick={() => removeSource(source.id)} aria-label={`Remove ${source.name}`}><X size={13} /></button>
+                  <span className="loaded-name"><strong>{source.name}</strong><small className={switcher.playerStatus[source.id]?.isError ? 'error' : ''}>{switcher.playerStatus[source.id]?.text ?? 'Loading…'}</small></span>
+                  <button className="dash-icon-button light" type="button" onClick={() => switcher.skip(source)} aria-label={`Skip to the next video in ${source.name}`}><SkipForward size={13} /></button>
                 </li>
               ))}
             </ul>
           )}
-          <p className="studio-message" role="status">{message}</p>
+          <p className="studio-message" role="status">{switcher.message}</p>
         </section>
 
         <section className="control-panel">
           <div className="control-panel-heading"><h2>On-air graphics</h2><span>LOWER THIRD · TICKER</span></div>
           <div className="graphics-form">
             <label className="field-label">Headline
-              <input className="text-input" value={lowerTitle} onChange={(event) => setLowerTitle(event.target.value)} maxLength={48} />
+              <input className="text-input" value={switcher.lowerTitle} onChange={(event) => switcher.setLowerTitle(event.target.value)} maxLength={48} />
             </label>
             <label className="field-label">Subheading
-              <input className="text-input" value={lowerDetail} onChange={(event) => setLowerDetail(event.target.value)} maxLength={72} />
+              <input className="text-input" value={switcher.lowerDetail} onChange={(event) => switcher.setLowerDetail(event.target.value)} maxLength={72} />
             </label>
             <label className="field-label">Ticker message
-              <input className="text-input" value={ticker} onChange={(event) => setTicker(event.target.value)} maxLength={100} />
+              <input className="text-input" value={switcher.ticker} onChange={(event) => switcher.setTicker(event.target.value)} maxLength={100} />
             </label>
             <div className="graphics-actions">
-              <button className={lowerOnAir ? 'button button-danger' : 'button button-dark'} type="button" onClick={() => setLowerOnAir((current) => !current)}>
-                <Captions size={14} /> {lowerOnAir ? 'TAKE LOWER OFF' : 'TAKE LOWER'}
+              <button className={switcher.lowerOnAir ? 'button button-danger' : 'button button-dark'} type="button" onClick={switcher.toggleLower}>
+                <Captions size={14} /> {switcher.lowerOnAir ? 'TAKE LOWER OFF' : 'TAKE LOWER'}
               </button>
-              <button className={tickerOnAir ? 'button button-danger' : 'button button-muted'} type="button" onClick={() => setTickerOnAir((current) => !current)}>
-                <Signal size={14} /> {tickerOnAir ? 'TAKE TICKER OFF' : 'TAKE TICKER'}
+              <button className={switcher.tickerOnAir ? 'button button-danger' : 'button button-muted'} type="button" onClick={switcher.toggleTicker}>
+                <Signal size={14} /> {switcher.tickerOnAir ? 'TAKE TICKER OFF' : 'TAKE TICKER'}
               </button>
             </div>
           </div>
         </section>
       </div>
 
-      <footer className="studio-footer"><span><Signal size={12} /> PVW {previewSource.name}</span><span>PGM {programSource.name} {isBlack ? '· BLACK' : ''}</span></footer>
+      <footer className="studio-footer"><span><Signal size={12} /> PVW {previewSource.name}</span><span>PGM {programSource.name} {switcher.isBlack ? '· BLACK' : ''}</span></footer>
     </main>
   )
 }

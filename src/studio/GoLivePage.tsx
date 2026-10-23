@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom'
 import { Copy, Eye, EyeOff, KeyRound, Plug, RadioTower, Square } from 'lucide-react'
 import { api, errorMessage, formatTime, type StudioLive } from '../api'
 import HlsPlayer from '../HlsPlayer'
+import { useSwitcher } from './switcherContext'
 
 function CopyField({ label, value, secret = false }: { label: string; value: string; secret?: boolean }) {
   const [revealed, setRevealed] = useState(!secret)
@@ -38,6 +39,7 @@ function GoLivePage() {
   const [description, setDescription] = useState('')
   const [busy, setBusy] = useState(false)
   const [message, setMessage] = useState('')
+  const { output } = useSwitcher()
 
   useEffect(() => {
     api<StudioLive>('/studio/live')
@@ -113,6 +115,11 @@ function GoLivePage() {
             <label className="field-label">Description
               <textarea className="text-input text-area" value={description} onChange={(event) => setDescription(event.target.value)} maxLength={500} rows={3} />
             </label>
+            <p className={output.state === 'streaming' ? 'switcher-status sending' : 'switcher-status'}>
+              {output.state === 'streaming'
+                ? <>Switcher output is sending PROGRAM to the server. <Link to="/studio/switcher">Open Switcher</Link></>
+                : <>Switcher output is off. <Link to="/studio/switcher">Start it on the Switcher</Link>, or stream from OBS.</>}
+            </p>
             {live && !live.encoderConnected && (
               <p className="form-error" role="note">
                 No video is coming in. Start the output on the <Link to="/studio/switcher">Switcher</Link> or start streaming from OBS first, then go live.

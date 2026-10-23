@@ -1,6 +1,7 @@
 import { NavLink, Outlet } from 'react-router-dom'
 import { CalendarClock, Clapperboard, ExternalLink, LayoutDashboard, ListVideo, LogOut, Radio, RadioTower } from 'lucide-react'
 import { useAuth } from '../auth'
+import { useSwitcher } from './switcherContext'
 
 const links = [
   { to: '/studio', label: 'Overview', icon: LayoutDashboard, end: true },
@@ -12,6 +13,11 @@ const links = [
 
 function StudioLayout() {
   const { user, logout } = useAuth()
+  const { output, live } = useSwitcher()
+  const badges: Record<string, string | null> = {
+    '/studio/live': live?.isLive ? 'ON AIR' : null,
+    '/studio/switcher': output.state === 'streaming' ? 'SENDING' : null,
+  }
 
   return (
     <div className="dash-shell">
@@ -25,6 +31,7 @@ function StudioLayout() {
           {links.map(({ to, label, icon: Icon, end }) => (
             <NavLink key={to} to={to} end={end} className={({ isActive }) => isActive ? 'dash-link active' : 'dash-link'}>
               <Icon size={16} /> <span>{label}</span>
+              {badges[to] && <small className={badges[to] === 'ON AIR' ? 'nav-badge live' : 'nav-badge'}>{badges[to]}</small>}
             </NavLink>
           ))}
         </nav>

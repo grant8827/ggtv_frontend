@@ -10,6 +10,7 @@ import WatchPage from './WatchPage'
 import StudioPage from './StudioPage'
 import LoginPage from './studio/LoginPage'
 import StudioLayout from './studio/StudioLayout'
+import SwitcherProvider from './studio/SwitcherProvider'
 import OverviewPage from './studio/OverviewPage'
 import GoLivePage from './studio/GoLivePage'
 import SchedulePage from './studio/SchedulePage'
@@ -49,7 +50,8 @@ function RequireStudioLogin() {
 
   if (checking) return <div className="dash-loading">Checking studio session…</div>
   if (!user) return <Navigate to="/studio/login" replace state={{ from: location.pathname }} />
-  return <StudioLayout />
+  // The switcher lives above the studio pages so sources and the output survive navigation.
+  return <SwitcherProvider><StudioLayout /></SwitcherProvider>
 }
 
 function App() {

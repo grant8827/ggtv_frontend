@@ -8,7 +8,15 @@ export type Source = {
   stream?: MediaStream
   // A video element the source plays into (loaded playlists).
   element?: HTMLVideoElement
+  // What to reconnect after a reload; saved sources start offline until reconnected.
+  saved?: SavedSource
+  offline?: boolean
 }
+
+export type SavedSource =
+  | { kind: 'camera'; deviceId: string }
+  | { kind: 'screen' }
+  | { kind: 'playlist'; playlistId: string }
 
 export type ProgramScene = {
   source: Source

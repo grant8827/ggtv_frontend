@@ -29,8 +29,14 @@ export function useSwitcherOutput(canvasRef: RefObject<HTMLCanvasElement | null>
   const ensureAudio = useCallback(() => {
     if (!audio.current) {
       const context = new AudioContext()
-      // The destination yields silence until the mic is connected, so the output always has audio.
-      audio.current = { context, destination: context.createMediaStreamDestination() }
+      const destination = context.createMediaStreamDestination()
+      // A destination with nothing connected produces no audio at all, and MediaRecorder then
+      // waits for audio and records nothing. A constant zero signal keeps silent audio flowing.
+      const silence = context.createConstantSource()
+      silence.offset.value = 0
+      silence.connect(destination)
+      silence.start()
+      audio.current = { context, destination }
     }
     return audio.current
   }, [])
