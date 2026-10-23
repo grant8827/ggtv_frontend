@@ -6,6 +6,11 @@
 :{$PORT:8080} {
 	encode zstd gzip
 
+	# Only SRS may call the publish hooks, and it reaches the backend directly.
+	handle /api/hooks/* {
+		respond 404
+	}
+
 	# Studio and viewer API calls go to the node backend over Railway's private network,
 	# so the browser sees one origin and the studio session cookie works.
 	handle /api/* {
