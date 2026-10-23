@@ -1,0 +1,29 @@
+@import "tailwindcss";
+
+:root {
+  color-scheme: light;
+  font-family: "DM Sans", sans-serif;
+  color: #18231e;
+  background: #edf1ed;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  --ink: #18231e;
+  --signal: #ff7045;
+  --signal-dark: #bd4f2f;
+  --muted: #748078;
+  --line: #dce3dd;
+  --display: "Barlow Condensed", "Arial Narrow", sans-serif;
+  --mono: "IBM Plex Mono", monospace;
+}
+
+* { box-sizing: border-box; }
+body { min-width: 320px; min-height: 100vh; margin: 0; }
+#root { width: 100%; max-width: none; min-height: 100vh; margin: 0; border: 0; text-align: left; }
+h1, h2 { color: var(--ink); font-family: var(--display); font-weight: 700; letter-spacing: 0; }
+h1 { margin: 0; }
+h2 { margin: 0; }
+p { margin-top: 0; }
+button, input { font: inherit; }
+button:focus-visible, a:focus-visible, input:focus-visible, summary:focus-visible { outline: 3px solid #31896b; outline-offset: 2px; }
+::selection { color: #18231e; background: #ffb195; }
