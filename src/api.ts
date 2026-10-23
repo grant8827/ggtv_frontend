@@ -1,5 +1,9 @@
+export type LiveSource = 'live' | 'playlist' | 'off'
+
 export type LiveStatus = {
   isLive: boolean
+  source: LiveSource
+  nowPlaying: { slotTitle: string | null; itemTitle: string | null } | null
   title: string
   description: string
   startedAt: string | null
@@ -7,10 +11,19 @@ export type LiveStatus = {
   hlsUrl: string
 }
 
+export type PlayoutStatus = {
+  state: 'idle' | 'starting' | 'playing' | 'error'
+  slotTitle: string | null
+  playlistName: string | null
+  itemTitle: string | null
+  error: string | null
+}
+
 export type StudioLive = LiveStatus & {
   streamName: string
   streamKey: string
   rtmpUrl: string
+  playout: PlayoutStatus
 }
 
 export type ScheduleKind = 'live' | 'playlist'

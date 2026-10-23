@@ -39,12 +39,15 @@ function OverviewPage() {
       </header>
 
       {error && <p className="form-error" role="alert">{error}</p>}
+      {live?.playout.state === 'error' && (
+        <p className="form-error" role="alert">Playlist "{live.playout.playlistName}" can't play: {live.playout.error}</p>
+      )}
 
       <div className="stat-grid">
         <section className={live?.isLive ? 'stat-card on-air' : 'stat-card'}>
           <span className="stat-label"><RadioTower size={13} /> BROADCAST</span>
-          <strong>{live ? (live.isLive ? 'ON AIR' : 'OFF AIR') : '—'}</strong>
-          <small>{live?.isLive ? live.title : 'Viewers see the channel as offline'}</small>
+          <strong>{live ? { live: 'ON AIR', playlist: 'PLAYLIST', off: 'OFF AIR' }[live.source] : '—'}</strong>
+          <small>{live?.source === 'live' ? live.title : live?.source === 'playlist' ? `Playing "${live.playout.itemTitle}"` : 'Viewers see the channel as offline'}</small>
         </section>
         <section className="stat-card">
           <span className="stat-label"><Plug size={13} /> ENCODER</span>

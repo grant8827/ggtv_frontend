@@ -29,12 +29,21 @@ function WatchPage() {
       api<ScheduleEntry[]>('/schedule').then(setSchedule).catch(() => setSchedule(null))
     }
     refresh()
-    const timer = window.setInterval(refresh, 30000)
+    const timer = window.setInterval(refresh, 15000)
     return () => window.clearInterval(timer)
   }, [])
 
   const now = new Date().toISOString()
   const onNow = schedule?.find((entry) => entry.start <= now && entry.end > now)
+  const mainSource = isMainChannel ? live?.source : undefined
+  const heading = mainSource === 'live'
+    ? live!.title
+    : mainSource === 'playlist' ? live!.nowPlaying?.slotTitle ?? selectedChannel.name : selectedChannel.name
+  const subheading = mainSource === 'live'
+    ? live!.description || 'Live feed from the GGTV origin'
+    : mainSource === 'playlist'
+      ? `Now playing: ${live!.nowPlaying?.itemTitle ?? 'scheduled programming'}`
+      : isMainChannel && onNow ? `On the schedule: ${onNow.title}` : 'Live feed from the GGTV origin'
 
   function selectChannel(channel: (typeof channels)[number]) {
     setSelectedId(channel.id)
@@ -63,11 +72,11 @@ function WatchPage() {
           <div className="player-meta">
             <div>
               <div className="channel-code"><CircleDot size={13} /> CHANNEL {selectedChannel.id} <span>/</span> {selectedChannel.detail}</div>
-              <h2>{isMainChannel && live?.isLive ? live.title : selectedChannel.name}</h2>
-              <p>{isMainChannel && live?.isLive ? (live.description || 'Live feed from the GGTV origin') : isMainChannel && onNow ? `On the schedule: ${onNow.title}` : 'Live feed from the GGTV origin'}</p>
+              <h2>{heading}</h2>
+              <p>{subheading}</p>
             </div>
-            <span className={isMainChannel && live?.isLive ? 'signal-badge on-air' : 'signal-badge'}>
-              {isMainChannel && live ? (live.isLive ? 'ON AIR' : 'OFF AIR') : streamUrl ? 'AWAITING SIGNAL' : 'OFFLINE'}
+            <span className={mainSource === 'live' ? 'signal-badge on-air' : mainSource === 'playlist' ? 'signal-badge on-schedule' : 'signal-badge'}>
+              {mainSource ? { live: 'ON AIR', playlist: 'NOW PLAYING', off: 'OFF AIR' }[mainSource] : streamUrl ? 'AWAITING SIGNAL' : 'OFFLINE'}
             </span>
           </div>
 
@@ -127,7 +136,7 @@ function WatchPage() {
             )}
           </section>
 
-          <div className="viewer-note"><Radio size={14} /><span>{live ? (live.isLive ? `On air since ${formatTime(live.startedAt!)}.` : 'The channel is currently off air.') : 'Playback uses HLS. The live origin is not connected yet.'}</span></div>
+          <div className="viewer-note"><Radio size={14} /><span>{live ? { live: `On air since ${formatTime(live.startedAt!)}.`, playlist: 'Scheduled programming is playing.', off: 'The channel is currently off air.' }[live.source] : 'Playback uses HLS. The live origin is not connected yet.'}</span></div>
         </aside>
       </div>
     </main>

@@ -129,3 +129,4 @@
 @media (max-width: 520px) {
   .stat-grid { grid-template-columns: minmax(0, 1fr); }
 }
+.signal-badge.on-schedule { color: #1f5d47; background: #dcefe6; }
