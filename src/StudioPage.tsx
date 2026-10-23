@@ -4,6 +4,7 @@ import {
   AlertTriangle,
   Camera,
   Captions,
+  ListVideo,
   Mic,
   MicOff,
   MonitorUp,
@@ -11,9 +12,13 @@ import {
   RadioTower,
   ScreenShare,
   Signal,
+  SkipForward,
   Square,
   Video,
+  X,
 } from 'lucide-react'
+import { api, type Playlist } from './api'
+import { createPlaylistPlayer, type PlaylistPlayer } from './studio/playlistPlayer'
 import { drawProgram, OUTPUT_HEIGHT, OUTPUT_WIDTH, type ProgramScene, type Source, type Transition } from './studio/programCompositor'
 import { useSwitcherOutput } from './studio/useSwitcherOutput'
 
@@ -28,6 +33,24 @@ const OUTPUT_LABELS = { idle: 'OUTPUT OFF', connecting: 'CONNECTING', streaming:
 
 function PreviewMonitor({ source }: { source: Source }) {
   const videoRef = useRef<HTMLVideoElement>(null)
+  const canvasRef = useRef<HTMLCanvasElement>(null)
+
+  // Playlist sources play in an element owned by their player; mirror it onto a canvas.
+  useEffect(() => {
+    const element = source.element
+    const context = canvasRef.current?.getContext('2d')
+    if (!element || !context) return
+    const timer = window.setInterval(() => {
+      context.fillStyle = '#080d0b'
+      context.fillRect(0, 0, 640, 360)
+      if (element.readyState < 2 || !element.videoWidth) return
+      const scale = Math.min(640 / element.videoWidth, 360 / element.videoHeight)
+      const width = element.videoWidth * scale
+      const height = element.videoHeight * scale
+      context.drawImage(element, (640 - width) / 2, (360 - height) / 2, width, height)
+    }, 1000 / 15)
+    return () => window.clearInterval(timer)
+  }, [source.element])
 
   useEffect(() => {
     const video = videoRef.current
@@ -43,7 +66,9 @@ function PreviewMonitor({ source }: { source: Source }) {
     <section className="monitor-panel preview">
       <div className="monitor-header"><span>PREVIEW</span><small>PVW 01</small></div>
       <div className="monitor-screen">
-        {source.stream ? (
+        {source.element ? (
+          <canvas ref={canvasRef} width={640} height={360} aria-label={`${source.name} source`} />
+        ) : source.stream ? (
           <video ref={videoRef} autoPlay muted playsInline aria-label={`${source.name} source`} />
         ) : (
           <div className={`test-pattern ${source.kind}`} />
@@ -74,8 +99,14 @@ function StudioPage() {
   const scene = useRef<ProgramScene | null>(null)
   const activeTransition = useRef<Transition | null>(null)
   const output = useSwitcherOutput(programCanvas)
+  const { attachAudio, detachAudio, setProgramAudio } = output
+  const players = useRef(new Map<string, PlaylistPlayer>())
+  const [playlists, setPlaylists] = useState<Playlist[]>([])
+  const [playlistId, setPlaylistId] = useState('')
+  const [playerStatus, setPlayerStatus] = useState<Record<string, { text: string; isError?: boolean }>>({})
   const previewSource = sources.find((source) => source.id === previewId) ?? sources[0]
   const programSource = sources.find((source) => source.id === programId) ?? sources[0]
+  const loadedPlaylists = sources.filter((source) => source.element)
 
   useEffect(() => {
     scene.current = {
@@ -96,10 +127,52 @@ function StudioPage() {
     return () => window.clearInterval(timer)
   }, [])
 
-  useEffect(() => () => {
-    streams.current.forEach((stream) => stream.getTracks().forEach((track) => track.stop()))
-    videos.current.forEach((video) => { video.srcObject = null })
+  useEffect(() => {
+    api<Playlist[]>('/studio/playlists').then(setPlaylists).catch(() => undefined)
   }, [])
+
+  useEffect(() => {
+    setProgramAudio(programId)
+  }, [programId, setProgramAudio])
+
+  useEffect(() => {
+    const ownedPlayers = players.current
+    const ownedVideos = videos.current
+    const ownedStreams = streams.current
+    return () => {
+      ownedStreams.forEach((stream) => stream.getTracks().forEach((track) => track.stop()))
+      ownedVideos.forEach((video) => { video.srcObject = null })
+      ownedPlayers.forEach((player) => player.destroy())
+    }
+  }, [])
+
+  function loadPlaylist() {
+    const playlist = playlists.find((item) => item.id === playlistId)
+    if (!playlist) {
+      setMessage('Choose a playlist to load.')
+      return
+    }
+    const id = `playlist-${Date.now()}`
+    const player = createPlaylistPlayer(playlist, (text, isError) => {
+      setPlayerStatus((current) => ({ ...current, [id]: { text, isError } }))
+    })
+    players.current.set(id, player)
+    videos.current.set(id, player.video)
+    attachAudio(id, player.video)
+    setSources((current) => [...current, { id, name: playlist.name.toUpperCase(), kind: 'media', element: player.video }])
+    setPreviewId(id)
+    setMessage(`Playlist "${playlist.name}" loaded to preview. TAKE it to put it on program.`)
+  }
+
+  function removeSource(id: string) {
+    players.current.get(id)?.destroy()
+    players.current.delete(id)
+    videos.current.delete(id)
+    detachAudio(id)
+    setSources((current) => current.filter((source) => source.id !== id))
+    if (previewId === id) setPreviewId('bars')
+    if (programId === id) setProgramId('bars')
+  }
 
   async function addCapture(kind: 'camera' | 'screen') {
     try {
@@ -226,6 +299,24 @@ function StudioPage() {
             <button className="capture-button" type="button" onClick={() => void addCapture('camera')}><Camera size={14} /> ADD CAMERA</button>
             <button className="capture-button" type="button" onClick={() => void addCapture('screen')}><ScreenShare size={14} /> SHARE SCREEN</button>
           </div>
+          <div className="playlist-loader">
+            <select className="text-input" aria-label="Playlist to load" value={playlistId} onChange={(event) => setPlaylistId(event.target.value)}>
+              <option value="">{playlists.length ? 'Choose a playlist…' : 'No playlists yet'}</option>
+              {playlists.map((playlist) => <option key={playlist.id} value={playlist.id}>{playlist.name} ({playlist.items.length})</option>)}
+            </select>
+            <button className="capture-button" type="button" onClick={loadPlaylist} disabled={!playlistId}><ListVideo size={14} /> LOAD PLAYLIST</button>
+          </div>
+          {loadedPlaylists.length > 0 && (
+            <ul className="loaded-playlists">
+              {loadedPlaylists.map((source) => (
+                <li key={source.id}>
+                  <span className="loaded-name"><strong>{source.name}</strong><small className={playerStatus[source.id]?.isError ? 'error' : ''}>{playerStatus[source.id]?.text ?? 'Loading…'}</small></span>
+                  <button className="dash-icon-button light" type="button" onClick={() => players.current.get(source.id)?.skip()} aria-label={`Skip to the next video in ${source.name}`}><SkipForward size={13} /></button>
+                  <button className="dash-icon-button light danger" type="button" onClick={() => removeSource(source.id)} aria-label={`Remove ${source.name}`}><X size={13} /></button>
+                </li>
+              ))}
+            </ul>
+          )}
           <p className="studio-message" role="status">{message}</p>
         </section>
 

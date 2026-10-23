@@ -23,6 +23,8 @@ export function useSwitcherOutput(canvasRef: RefObject<HTMLCanvasElement | null>
   const recorder = useRef<MediaRecorder | null>(null)
   const audio = useRef<Audio | null>(null)
   const mic = useRef<{ stream: MediaStream; node: MediaStreamAudioSourceNode } | null>(null)
+  const mediaGains = useRef(new Map<string, { gain: GainNode; node: MediaElementAudioSourceNode }>())
+  const programId = useRef('')
 
   const ensureAudio = useCallback(() => {
     if (!audio.current) {
@@ -34,6 +36,35 @@ export function useSwitcherOutput(canvasRef: RefObject<HTMLCanvasElement | null>
   }, [])
 
   // Each path that ends the output clears `socket` first, so the socket's own close event is ignored.
+  // Sources with sound (playlists) are heard only while they are on PROGRAM, in the output
+  // and on this computer's speakers so the operator hears what goes out.
+  const attachAudio = useCallback((id: string, element: HTMLVideoElement) => {
+    const { context, destination } = ensureAudio()
+    void context.resume()
+    const node = context.createMediaElementSource(element)
+    const gain = context.createGain()
+    gain.gain.value = id === programId.current ? 1 : 0
+    node.connect(gain)
+    gain.connect(destination)
+    gain.connect(context.destination)
+    mediaGains.current.set(id, { gain, node })
+  }, [ensureAudio])
+
+  const detachAudio = useCallback((id: string) => {
+    const entry = mediaGains.current.get(id)
+    entry?.gain.disconnect()
+    entry?.node.disconnect()
+    mediaGains.current.delete(id)
+  }, [])
+
+  const setProgramAudio = useCallback((id: string) => {
+    programId.current = id
+    const context = audio.current?.context
+    mediaGains.current.forEach(({ gain }, sourceId) => {
+      if (context) gain.gain.setTargetAtTime(sourceId === id ? 1 : 0, context.currentTime, 0.08)
+    })
+  }, [])
+
   const stop = useCallback(() => {
     if (recorder.current?.state === 'recording') recorder.current.stop()
     recorder.current = null
@@ -130,5 +161,5 @@ export function useSwitcherOutput(canvasRef: RefObject<HTMLCanvasElement | null>
     void audio.current?.context.close()
   }, [])
 
-  return { state, message, micOn, start, stop, toggleMic }
+  return { state, message, micOn, start, stop, toggleMic, attachAudio, detachAudio, setProgramAudio }
 }

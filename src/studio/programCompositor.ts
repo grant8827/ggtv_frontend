@@ -6,6 +6,8 @@ export type Source = {
   name: string
   kind: 'pattern' | 'camera' | 'screen' | 'media'
   stream?: MediaStream
+  // A video element the source plays into (loaded playlists).
+  element?: HTMLVideoElement
 }
 
 export type ProgramScene = {

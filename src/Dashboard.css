@@ -151,3 +151,17 @@
   .output-actions { flex-wrap: wrap; }
 }
 .playlist-message { margin-top: 12px; }
+.file-pill { display: flex; align-items: center; gap: 7px; min-width: 0; height: 39px; padding: 0 10px; color: var(--ink); background: white; border: 1px dashed #aebbb5; border-radius: 4px; font-size: 11px; }
+.file-pill span { overflow: hidden; flex: 1; text-overflow: ellipsis; white-space: nowrap; }
+.file-pill small { flex: 0 0 auto; color: #31896b; font: 700 8px var(--mono); }
+.file-pill.missing { border-color: #e1b3ab; }
+.file-pill.missing small { color: #b33a2f; }
+.playlist-loader { display: flex; gap: 7px; margin-top: 8px; }
+.playlist-loader .text-input { height: 34px; font-size: 11px; }
+.playlist-loader .capture-button { flex: 0 0 auto; }
+.loaded-playlists { display: grid; gap: 6px; margin: 10px 0 0; padding: 0; list-style: none; }
+.loaded-playlists li { display: flex; align-items: center; gap: 6px; padding: 7px 8px; background: #f6f8f6; border: 1px solid #e3e9e4; border-radius: 4px; }
+.loaded-name { flex: 1; min-width: 0; }
+.loaded-name strong { display: block; font: 700 10px var(--mono); }
+.loaded-name small { display: block; overflow: hidden; margin-top: 3px; color: var(--muted); font-size: 10px; text-overflow: ellipsis; white-space: nowrap; }
+.loaded-name small.error { color: #b33a2f; }

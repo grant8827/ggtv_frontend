@@ -42,7 +42,10 @@ export type ScheduleEntry = {
 export type PlaylistItem = {
   id?: string
   title: string
-  url: string
+  // A link to a video, or null for a file stored in a studio browser's IndexedDB (fileId).
+  url: string | null
+  fileId?: string
+  fileName?: string
   durationMinutes: number
 }
 
