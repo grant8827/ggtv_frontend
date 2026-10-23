@@ -13,12 +13,15 @@ const channels = [
 
 function WatchPage() {
   const [selectedId, setSelectedId] = useState(channels[0].id)
-  const [streamUrl, setStreamUrl] = useState(channels[0].stream)
-  const [draftUrl, setDraftUrl] = useState(channels[0].stream)
+  const [overrideUrl, setOverrideUrl] = useState<string | null>(null)
+  const [draftUrl, setDraftUrl] = useState<string | null>(null)
   const [live, setLive] = useState<LiveStatus | null>(null)
   const [schedule, setSchedule] = useState<ScheduleEntry[] | null>(null)
   const selectedChannel = channels.find((channel) => channel.id === selectedId) ?? channels[0]
   const isMainChannel = selectedChannel.id === channels[0].id
+  // The main feed's HLS address comes from the backend (HLS_BASE_URL) once it responds.
+  const channelStream = isMainChannel ? live?.hlsUrl ?? selectedChannel.stream : selectedChannel.stream
+  const streamUrl = overrideUrl ?? channelStream
 
   useEffect(() => {
     function refresh() {
@@ -35,13 +38,13 @@ function WatchPage() {
 
   function selectChannel(channel: (typeof channels)[number]) {
     setSelectedId(channel.id)
-    setStreamUrl(channel.stream)
-    setDraftUrl(channel.stream)
+    setOverrideUrl(null)
+    setDraftUrl(null)
   }
 
   function connectStream(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
-    setStreamUrl(draftUrl.trim())
+    setOverrideUrl((draftUrl ?? streamUrl).trim())
   }
 
   return (
@@ -76,7 +79,7 @@ function WatchPage() {
                 aria-label="HLS stream URL"
                 type="url"
                 placeholder="https://origin.example/live/channel.m3u8"
-                value={draftUrl}
+                value={draftUrl ?? streamUrl}
                 onChange={(event) => setDraftUrl(event.target.value)}
               />
               <button className="button button-dark" type="submit">CONNECT</button>
