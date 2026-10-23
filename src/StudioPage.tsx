@@ -1,22 +1,21 @@
 import { useEffect, useRef, useState } from 'react'
+import { Link } from 'react-router-dom'
 import {
   AlertTriangle,
   Camera,
   Captions,
+  Mic,
+  MicOff,
   MonitorUp,
   Radio,
+  RadioTower,
   ScreenShare,
   Signal,
   Square,
   Video,
 } from 'lucide-react'
-
-type Source = {
-  id: string
-  name: string
-  kind: 'pattern' | 'camera' | 'screen' | 'media'
-  stream?: MediaStream
-}
+import { drawProgram, OUTPUT_HEIGHT, OUTPUT_WIDTH, type ProgramScene, type Source, type Transition } from './studio/programCompositor'
+import { useSwitcherOutput } from './studio/useSwitcherOutput'
 
 const initialSources: Source[] = [
   { id: 'bars', name: 'COLOR BARS', kind: 'pattern' },
@@ -25,21 +24,9 @@ const initialSources: Source[] = [
   { id: 'feed-2', name: 'INPUT 04', kind: 'media' },
 ]
 
-function Monitor({
-  source,
-  label,
-  isProgram,
-  isBlack = false,
-  lowerThird,
-  ticker,
-}: {
-  source: Source
-  label: string
-  isProgram?: boolean
-  isBlack?: boolean
-  lowerThird: { title: string; detail: string } | null
-  ticker: string
-}) {
+const OUTPUT_LABELS = { idle: 'OUTPUT OFF', connecting: 'CONNECTING', streaming: 'SENDING TO ORIGIN', error: 'OUTPUT ERROR' }
+
+function PreviewMonitor({ source }: { source: Source }) {
   const videoRef = useRef<HTMLVideoElement>(null)
 
   useEffect(() => {
@@ -53,8 +40,8 @@ function Monitor({
   }, [source.stream])
 
   return (
-    <section className={isProgram ? 'monitor-panel program' : 'monitor-panel preview'}>
-      <div className="monitor-header"><span>{label}</span><small>{isProgram ? 'PGM 01' : 'PVW 01'}</small></div>
+    <section className="monitor-panel preview">
+      <div className="monitor-header"><span>PREVIEW</span><small>PVW 01</small></div>
       <div className="monitor-screen">
         {source.stream ? (
           <video ref={videoRef} autoPlay muted playsInline aria-label={`${source.name} source`} />
@@ -62,11 +49,6 @@ function Monitor({
           <div className={`test-pattern ${source.kind}`} />
         )}
         <span className="screen-caption">{source.name}</span>
-        {isProgram && lowerThird && (
-          <div className="monitor-overlay-lower"><Captions size={16} /><div><strong>{lowerThird.title}</strong><span>{lowerThird.detail}</span></div></div>
-        )}
-        {isProgram && ticker && <div className="monitor-ticker">{ticker}</div>}
-        {isProgram && isBlack && <div className="monitor-black">FADE TO BLACK</div>}
       </div>
       <p className="monitor-source">SOURCE: {source.name}</p>
     </section>
@@ -85,19 +67,44 @@ function StudioPage() {
   const [ticker, setTicker] = useState('WELCOME TO GGTV LIVE')
   const [lowerOnAir, setLowerOnAir] = useState(false)
   const [tickerOnAir, setTickerOnAir] = useState(false)
-  const [message, setMessage] = useState('Local preview only. No signal is being broadcast.')
+  const [message, setMessage] = useState('Load a source to preview, then TAKE it to program.')
   const streams = useRef<MediaStream[]>([])
+  const videos = useRef(new Map<string, HTMLVideoElement>())
+  const programCanvas = useRef<HTMLCanvasElement>(null)
+  const scene = useRef<ProgramScene | null>(null)
+  const activeTransition = useRef<Transition | null>(null)
+  const output = useSwitcherOutput(programCanvas)
   const previewSource = sources.find((source) => source.id === previewId) ?? sources[0]
   const programSource = sources.find((source) => source.id === programId) ?? sources[0]
 
+  useEffect(() => {
+    scene.current = {
+      source: programSource,
+      lowerThird: lowerOnAir ? { title: lowerTitle, detail: lowerDetail } : null,
+      ticker: tickerOnAir ? ticker : '',
+      black: isBlack,
+    }
+  })
+
+  useEffect(() => {
+    const context = programCanvas.current?.getContext('2d')
+    if (!context) return
+    // A timer rather than requestAnimationFrame, which stops entirely in background tabs.
+    const timer = window.setInterval(() => {
+      if (scene.current) drawProgram(context, scene.current, activeTransition.current, videos.current, performance.now())
+    }, 1000 / 30)
+    return () => window.clearInterval(timer)
+  }, [])
+
   useEffect(() => () => {
     streams.current.forEach((stream) => stream.getTracks().forEach((track) => track.stop()))
+    videos.current.forEach((video) => { video.srcObject = null })
   }, [])
 
   async function addCapture(kind: 'camera' | 'screen') {
     try {
       const stream = kind === 'camera'
-        ? await navigator.mediaDevices.getUserMedia({ video: true, audio: false })
+        ? await navigator.mediaDevices.getUserMedia({ video: { width: 1280, height: 720 }, audio: false })
         : await navigator.mediaDevices.getDisplayMedia({ video: true, audio: false })
       const source: Source = {
         id: `${kind}-${Date.now()}`,
@@ -105,6 +112,13 @@ function StudioPage() {
         kind,
         stream,
       }
+      // The program canvas draws from its own muted video element for each captured source.
+      const video = document.createElement('video')
+      video.muted = true
+      video.playsInline = true
+      video.srcObject = stream
+      void video.play().catch(() => undefined)
+      videos.current.set(source.id, video)
       streams.current.push(stream)
       setSources((current) => [...current, source])
       setPreviewId(source.id)
@@ -115,12 +129,14 @@ function StudioPage() {
   }
 
   function takeProgram() {
+    if (previewId === programId) return
+    activeTransition.current = transition === 'CUT' || duration === 0
+      ? null
+      : { from: programSource, mode: transition, start: performance.now(), duration }
     setProgramId(previewId)
     setIsBlack(false)
-    setMessage(`${transition} to ${previewSource.name}. Local preview only.`)
+    setMessage(`${transition} to ${previewSource.name}.`)
   }
-
-  const activeLowerThird = lowerOnAir ? { title: lowerTitle, detail: lowerDetail } : null
 
   return (
     <main className="studio-page">
@@ -129,21 +145,40 @@ function StudioPage() {
           <div className="eyebrow"><Radio size={13} /> GGTV STUDIO <span>/</span> SWITCHER</div>
           <h1>Studio switcher</h1>
         </div>
-        <div className="studio-mode"><span className="status-light" /> LOCAL PREVIEW · API OFFLINE</div>
+        <div className={`studio-mode output-${output.state}`}><span className="status-light" /> {OUTPUT_LABELS[output.state]}</div>
       </header>
 
-      <div className="studio-notice"><AlertTriangle size={15} /><span>Switcher actions and graphics are local to this browser until the control API is connected.</span></div>
+      <section className="control-panel output-panel" aria-label="Program output">
+        <div className="output-copy">
+          <h2>Program output</h2>
+          <p className={output.state === 'error' ? 'output-message error' : 'output-message'} role="status">
+            {output.message || 'Send the PROGRAM monitor to viewers instead of using OBS. Keep this tab open and in front while sending.'}
+          </p>
+        </div>
+        <div className="output-actions">
+          <button className={output.micOn ? 'capture-button active' : 'capture-button'} type="button" onClick={() => void output.toggleMic()} aria-pressed={output.micOn}>
+            {output.micOn ? <Mic size={14} /> : <MicOff size={14} />} {output.micOn ? 'MIC ON' : 'MIC OFF'}
+          </button>
+          {output.state === 'streaming' || output.state === 'connecting' ? (
+            <button className="button button-danger" type="button" onClick={output.stop}><Square size={13} /> STOP OUTPUT</button>
+          ) : (
+            <button className="button button-primary" type="button" onClick={() => void output.start()}><RadioTower size={14} /> START OUTPUT</button>
+          )}
+          {output.state === 'streaming' && <Link className="text-link" to="/studio/live">GO LIVE PAGE ↗</Link>}
+        </div>
+      </section>
+
+      <div className="studio-notice"><AlertTriangle size={15} /><span>PROGRAM shows exactly what is sent. Browsers slow down background tabs, so keep this tab visible while the output is on.</span></div>
 
       <div className="monitor-grid">
-        <Monitor source={previewSource} label="PREVIEW" lowerThird={null} ticker="" />
-        <Monitor
-          source={programSource}
-          label="PROGRAM"
-          isProgram
-          isBlack={isBlack}
-          lowerThird={activeLowerThird}
-          ticker={tickerOnAir ? ticker : ''}
-        />
+        <PreviewMonitor source={previewSource} />
+        <section className="monitor-panel program">
+          <div className="monitor-header"><span>PROGRAM</span><small>PGM 01 · {OUTPUT_WIDTH}×{OUTPUT_HEIGHT}</small></div>
+          <div className="monitor-screen">
+            <canvas ref={programCanvas} width={OUTPUT_WIDTH} height={OUTPUT_HEIGHT} aria-label={`Program output: ${programSource.name}`} />
+          </div>
+          <p className="monitor-source">SOURCE: {programSource.name}{isBlack ? ' · BLACK' : ''}</p>
+        </section>
       </div>
 
       <section className="switcher-bar" aria-label="Transition controls">

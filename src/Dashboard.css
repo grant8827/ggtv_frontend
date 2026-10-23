@@ -130,3 +130,23 @@
   .stat-grid { grid-template-columns: minmax(0, 1fr); }
 }
 .signal-badge.on-schedule { color: #1f5d47; background: #dcefe6; }
+
+/* ---------- switcher output ---------- */
+.monitor-screen canvas { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; background: #080d0b; }
+.output-panel { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 14px; }
+.output-copy h2 { margin: 0; font: 700 14px var(--display); }
+.output-message { margin: 5px 0 0; color: var(--muted); font-size: 11px; line-height: 1.5; }
+.output-message.error { color: #b33a2f; }
+.output-actions { display: flex; flex: 0 0 auto; align-items: center; gap: 8px; }
+.output-actions .capture-button { min-height: 40px; }
+.capture-button.active { color: #1f5d47; background: #dcefe6; border-color: #a9d3bf; }
+.studio-mode.output-idle { color: #53615a; background: #e3e9e5; border-color: #d3dcd6; }
+.studio-mode.output-idle .status-light { background: #8e9b95; box-shadow: none; }
+.studio-mode.output-connecting { color: #805124; background: #fff0d7; border-color: #f2dfbe; }
+.studio-mode.output-streaming { color: white; background: #d84b43; border-color: #d84b43; }
+.studio-mode.output-streaming .status-light { background: white; animation: dash-pulse 1.2s ease-in-out infinite; }
+.studio-mode.output-error { color: #8f2c22; background: #ffe4dc; border-color: #f3c3b6; }
+@media (max-width: 800px) {
+  .output-panel { align-items: stretch; flex-direction: column; }
+  .output-actions { flex-wrap: wrap; }
+}
