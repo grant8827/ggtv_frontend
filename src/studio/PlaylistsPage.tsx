@@ -12,11 +12,33 @@ function formatDuration(totalMinutes: number) {
   return hours ? `${hours}h ${mins}m` : `${mins}m`
 }
 
+// Catches the common mistakes before the server does, with a message that says what to fix.
+function problemWith(name: string, items: PlaylistItem[]) {
+  if (!name.trim()) return 'Give the playlist a name.'
+  for (const [index, item] of items.entries()) {
+    const label = `Item ${index + 1}`
+    if (!item.title.trim()) return `${label} needs a title.`
+    if (!item.url.trim()) return `${label} needs a video link.`
+    let url: URL
+    try {
+      url = new URL(item.url.trim())
+    } catch {
+      return `${label}: the link must be a full address starting with https://`
+    }
+    if (!['http:', 'https:'].includes(url.protocol)) return `${label}: the link must start with http:// or https://`
+    if (/(^|\.)(youtube\.com|youtu\.be|vimeo\.com|facebook\.com|tiktok\.com)$/.test(url.hostname)) {
+      return `${label}: ${url.hostname} links are web pages, not video files. Use a direct .mp4 or .m3u8 link.`
+    }
+  }
+  return null
+}
+
 function PlaylistsPage() {
   const [playlists, setPlaylists] = useState<Playlist[]>([])
   const [draft, setDraft] = useState<Draft | null>(null)
   const [busy, setBusy] = useState(false)
   const [message, setMessage] = useState('')
+  const [isError, setIsError] = useState(false)
 
   async function load() {
     setPlaylists(await api<Playlist[]>('/studio/playlists'))
@@ -54,15 +76,21 @@ function PlaylistsPage() {
 
   async function save() {
     if (!draft) return
+    // Rows left completely empty (like the starter row) are dropped rather than rejected.
+    const items = draft.items.filter((item) => item.title.trim() || item.url.trim())
+    const problem = problemWith(draft.name, items)
+    setIsError(Boolean(problem))
+    setMessage(problem ?? '')
+    if (problem) return
     setBusy(true)
-    setMessage('')
     try {
-      const body = { name: draft.name, items: draft.items }
+      const body = { name: draft.name, items }
       const saved = await api<Playlist>(draft.id ? `/studio/playlists/${draft.id}` : '/studio/playlists', { method: draft.id ? 'PUT' : 'POST', body })
       await load()
       open(saved)
       setMessage('Playlist saved.')
     } catch (caught) {
+      setIsError(true)
       setMessage(errorMessage(caught))
     } finally {
       setBusy(false)
@@ -75,8 +103,10 @@ function PlaylistsPage() {
       await api(`/studio/playlists/${draft.id}`, { method: 'DELETE' })
       setDraft(null)
       await load()
+      setIsError(false)
       setMessage('Playlist deleted.')
     } catch (caught) {
+      setIsError(true)
       setMessage(errorMessage(caught))
     }
   }
@@ -156,7 +186,7 @@ function PlaylistsPage() {
               </div>
             </div>
           )}
-          {message && <p className="studio-message" role="status">{message}</p>}
+          {message && <p className={isError ? 'form-error playlist-message' : 'studio-message'} role={isError ? 'alert' : 'status'}>{message}</p>}
         </section>
       </div>
     </main>
