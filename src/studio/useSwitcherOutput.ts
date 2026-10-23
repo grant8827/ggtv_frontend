@@ -22,6 +22,7 @@ export function useSwitcherOutput(canvasRef: RefObject<HTMLCanvasElement | null>
   const socket = useRef<WebSocket | null>(null)
   const recorder = useRef<MediaRecorder | null>(null)
   const audio = useRef<Audio | null>(null)
+  const wakeLock = useRef<WakeLockSentinel | null>(null)
   const mic = useRef<{ stream: MediaStream; node: MediaStreamAudioSourceNode } | null>(null)
   const mediaGains = useRef(new Map<string, { gain: GainNode; node: MediaElementAudioSourceNode }>())
   const programId = useRef('')
@@ -70,6 +71,31 @@ export function useSwitcherOutput(canvasRef: RefObject<HTMLCanvasElement | null>
       if (context) gain.gain.setTargetAtTime(sourceId === id ? 1 : 0, context.currentTime, 0.08)
     })
   }, [])
+
+  // Keeps the screen (and so the computer) awake while sending. Browsers drop the lock when the
+  // tab is hidden, so it is taken again whenever the tab comes back.
+  useEffect(() => {
+    if (state !== 'streaming' || !navigator.wakeLock) return
+    let cancelled = false
+    const acquire = () => {
+      if (document.visibilityState !== 'visible' || wakeLock.current) return
+      navigator.wakeLock.request('screen').then((lock) => {
+        if (cancelled) void lock.release()
+        else {
+          wakeLock.current = lock
+          lock.addEventListener('release', () => { wakeLock.current = null })
+        }
+      }).catch(() => undefined)
+    }
+    acquire()
+    document.addEventListener('visibilitychange', acquire)
+    return () => {
+      cancelled = true
+      document.removeEventListener('visibilitychange', acquire)
+      void wakeLock.current?.release()
+      wakeLock.current = null
+    }
+  }, [state])
 
   const stop = useCallback(() => {
     if (recorder.current?.state === 'recording') recorder.current.stop()

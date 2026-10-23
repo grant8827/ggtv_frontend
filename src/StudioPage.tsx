@@ -141,7 +141,7 @@ function StudioPage() {
         </div>
       </section>
 
-      <div className="studio-notice"><AlertTriangle size={15} /><span>PROGRAM shows exactly what is sent. Browsers slow down background tabs, so keep this tab visible while the output is on.</span></div>
+      <div className="studio-notice"><AlertTriangle size={15} /><span>PROGRAM shows exactly what is sent. You can switch to other tabs and studio pages while sending; closing this tab or letting the computer sleep stops the output.</span></div>
 
       <div className="monitor-grid">
         <PreviewMonitor source={previewSource} />

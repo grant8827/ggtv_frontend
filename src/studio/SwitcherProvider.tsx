@@ -88,12 +88,31 @@ function SwitcherProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     const context = programCanvas.getContext('2d')
     if (!context) return
-    // A timer rather than requestAnimationFrame, which stops entirely in background tabs.
-    const timer = window.setInterval(() => {
+    // The frame clock runs in a worker: Chrome slows page timers in background tabs to about
+    // once a second (once a minute after 5 minutes), but leaves worker timers alone, so
+    // PROGRAM keeps drawing at full rate while the operator uses other tabs.
+    const clockUrl = URL.createObjectURL(new Blob([`setInterval(() => postMessage(0), ${1000 / 30})`], { type: 'text/javascript' }))
+    const clock = new Worker(clockUrl)
+    clock.onmessage = () => {
       if (scene.current) drawProgram(context, scene.current, activeTransition.current, videos.current, performance.now())
-    }, 1000 / 30)
-    return () => window.clearInterval(timer)
+    }
+    return () => {
+      clock.terminate()
+      URL.revokeObjectURL(clockUrl)
+    }
   }, [programCanvas])
+
+  // Closing or reloading the tab is the one thing that always stops the broadcast, so ask first.
+  const onAir = output.state === 'streaming' || Boolean(live?.isLive)
+  useEffect(() => {
+    if (!onAir) return
+    const warn = (event: BeforeUnloadEvent) => {
+      event.preventDefault()
+      event.returnValue = ''
+    }
+    window.addEventListener('beforeunload', warn)
+    return () => window.removeEventListener('beforeunload', warn)
+  }, [onAir])
 
   useEffect(() => {
     try {
