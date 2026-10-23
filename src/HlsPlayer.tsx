@@ -7,10 +7,23 @@ type HlsPlayerProps = {
   channelName: string
 }
 
+const RETRY_MS = 5000
+
 function HlsPlayer({ src, channelName }: HlsPlayerProps) {
   const videoRef = useRef<HTMLVideoElement>(null)
   const [failedSrc, setFailedSrc] = useState('')
   const [playingSrc, setPlayingSrc] = useState('')
+  // Bumped to reload the source; a stream that isn't up yet keeps being retried.
+  const [attempt, setAttempt] = useState(0)
+
+  useEffect(() => {
+    if (!src || failedSrc !== src) return
+    const timer = window.setTimeout(() => {
+      setFailedSrc('')
+      setAttempt((current) => current + 1)
+    }, RETRY_MS)
+    return () => window.clearTimeout(timer)
+  }, [failedSrc, src])
 
   useEffect(() => {
     const video = videoRef.current
@@ -38,7 +51,7 @@ function HlsPlayer({ src, channelName }: HlsPlayerProps) {
       video.removeAttribute('src')
       video.load()
     }
-  }, [src])
+  }, [src, attempt])
 
   const status = !src || failedSrc === src
     ? 'offline'
@@ -59,7 +72,10 @@ function HlsPlayer({ src, channelName }: HlsPlayerProps) {
         className="hls-video"
         controls
         playsInline
-        preload="none"
+        preload="metadata"
+        // Live TV starts muted on its own (browsers allow that), including after a retry.
+        autoPlay
+        muted
         aria-label={`${channelName} live video`}
         onPlaying={() => setPlayingSrc(src)}
         onWaiting={() => setPlayingSrc((current) => current === src ? '' : current)}

@@ -1,4 +1,5 @@
 import { useEffect, useState, type FormEvent } from 'react'
+import { Link } from 'react-router-dom'
 import { Copy, Eye, EyeOff, KeyRound, Plug, RadioTower, Square } from 'lucide-react'
 import { api, errorMessage, formatTime, type StudioLive } from '../api'
 import HlsPlayer from '../HlsPlayer'
@@ -46,6 +47,12 @@ function GoLivePage() {
         setDescription(state.description)
       })
       .catch((caught) => setMessage(errorMessage(caught)))
+
+    // Keep the encoder status current so the page notices when OBS or the switcher connects.
+    const timer = window.setInterval(() => {
+      api<StudioLive>('/studio/live').then(setLive).catch(() => undefined)
+    }, 5000)
+    return () => window.clearInterval(timer)
   }, [])
 
   async function run(path: string, body: unknown, done: string) {
@@ -63,6 +70,8 @@ function GoLivePage() {
 
   function goLive(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
+    if (!live?.isLive && !live?.encoderConnected
+      && !window.confirm('No video is reaching the server yet, so viewers will see an empty player. Go live anyway?')) return
     void run('/studio/live/start', { title, description }, live?.isLive ? 'Broadcast details updated.' : 'You are on air.')
   }
 
@@ -104,6 +113,11 @@ function GoLivePage() {
             <label className="field-label">Description
               <textarea className="text-input text-area" value={description} onChange={(event) => setDescription(event.target.value)} maxLength={500} rows={3} />
             </label>
+            {live && !live.encoderConnected && (
+              <p className="form-error" role="note">
+                No video is coming in. Start the output on the <Link to="/studio/switcher">Switcher</Link> or start streaming from OBS first, then go live.
+              </p>
+            )}
             <div className="graphics-actions">
               <button className="button button-primary" type="submit" disabled={busy || !live}>
                 <RadioTower size={14} /> {live?.isLive ? 'UPDATE DETAILS' : 'GO LIVE'}
