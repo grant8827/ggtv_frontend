@@ -49,7 +49,9 @@ export function createPlaylistPlayer(playlist: Playlist, onStatus: (text: string
     const current = ++attempt
     release()
     try {
-      if (item.fileId) {
+      if (item.mediaId) {
+        video.src = `/api/studio/media/${item.mediaId}/file`
+      } else if (item.fileId) {
         const stored = await getFile(item.fileId)
         if (!stored) throw new Error('not stored in this browser')
         objectUrl = URL.createObjectURL(stored.blob)

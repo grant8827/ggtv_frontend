@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type ChangeEvent } from 'react'
-import { ArrowDown, ArrowUp, FileVideo, ListPlus, Plus, Save, Trash2, Upload, X } from 'lucide-react'
-import { api, errorMessage, type Playlist, type PlaylistItem } from '../api'
+import { ArrowDown, ArrowUp, FileVideo, HardDrive, ListPlus, Plus, Save, Server, Trash2, Upload, X } from 'lucide-react'
+import { api, errorMessage, uploadMedia, type MediaFile, type MediaLibrary, type Playlist, type PlaylistItem } from '../api'
 import { formatBytes, hasFiles, saveFile, storageUsage, videoMinutes } from './mediaStore'
 
 type Draft = { id: string | null; name: string; items: PlaylistItem[] }
@@ -20,7 +20,7 @@ function problemWith(name: string, items: PlaylistItem[]) {
   for (const [index, item] of items.entries()) {
     const label = `Item ${index + 1}`
     if (!item.title.trim()) return `${label} needs a title.`
-    if (item.fileId) continue
+    if (item.fileId || item.mediaId) continue
     if (!item.url?.trim()) return `${label} needs a video link.`
     let url: URL
     try {
@@ -45,6 +45,67 @@ function PlaylistsPage() {
   const [storedHere, setStoredHere] = useState<Set<string>>(new Set())
   const [usage, setUsage] = useState('')
   const fileInput = useRef<HTMLInputElement>(null)
+  const uploadInput = useRef<HTMLInputElement>(null)
+  const [library, setLibrary] = useState<MediaLibrary | null>(null)
+
+  function loadLibrary() {
+    api<MediaLibrary>('/studio/media').then(setLibrary).catch(() => undefined)
+  }
+
+  useEffect(() => {
+    api<MediaLibrary>('/studio/media').then(setLibrary).catch(() => undefined)
+  }, [])
+
+  function addItems(added: PlaylistItem[]) {
+    // Replace the empty starter row instead of keeping it above the new videos.
+    setDraft((current) => current && {
+      ...current,
+      items: [...current.items.filter((item) => item.title.trim() || item.url?.trim() || item.fileId || item.mediaId), ...added],
+    })
+  }
+
+  const titleFrom = (fileName: string) => fileName.replace(/\.[^.]+$/, '').slice(0, 120)
+
+  async function uploadFiles(event: ChangeEvent<HTMLInputElement>) {
+    const files = [...(event.target.files ?? [])]
+    event.target.value = ''
+    if (!files.length) return
+    setBusy(true)
+    setIsError(false)
+    const added: PlaylistItem[] = []
+    try {
+      for (const [index, file] of files.entries()) {
+        const durationMinutes = await videoMinutes(file)
+        const media = await uploadMedia(file, (fraction) => {
+          setMessage(`Uploading ${file.name} (${index + 1} of ${files.length}) · ${Math.round(fraction * 100)}%`)
+        })
+        added.push({ id: newId(), title: titleFrom(file.name), url: null, mediaId: media.id, fileName: media.name, durationMinutes })
+      }
+      setMessage(`${files.length} video${files.length > 1 ? 's' : ''} uploaded. Save the playlist to add ${files.length > 1 ? 'them' : 'it'}.`)
+    } catch (caught) {
+      setIsError(true)
+      setMessage(`${added.length ? `${added.length} uploaded, then: ` : ''}${errorMessage(caught)}`)
+    } finally {
+      addItems(added)
+      setBusy(false)
+      loadLibrary()
+    }
+  }
+
+  function addFromLibrary(media: MediaFile) {
+    addItems([{ id: newId(), title: titleFrom(media.name), url: null, mediaId: media.id, fileName: media.name, durationMinutes: 0 }])
+  }
+
+  async function deleteMedia(media: MediaFile) {
+    if (!window.confirm(`Delete "${media.name}" from the server? This can't be undone.`)) return
+    try {
+      await api(`/studio/media/${media.id}`, { method: 'DELETE' })
+      loadLibrary()
+    } catch (caught) {
+      setIsError(true)
+      setMessage(errorMessage(caught))
+    }
+  }
   const fileIds = draft?.items.flatMap((item) => item.fileId ? [item.fileId] : []).join(',') ?? ''
 
   // Which of this playlist's files are in this browser's storage.
@@ -70,18 +131,14 @@ function PlaylistsPage() {
         const stored = await saveFile(file)
         added.push({
           id: newId(),
-          title: file.name.replace(/\.[^.]+$/, '').slice(0, 120),
+          title: titleFrom(file.name),
           url: null,
           fileId: stored.id,
           fileName: file.name.slice(0, 200),
           durationMinutes: await videoMinutes(file),
         })
       }
-      // Replace the empty starter row instead of keeping it above the new files.
-      setDraft((current) => current && {
-        ...current,
-        items: [...current.items.filter((item) => item.title.trim() || item.url?.trim() || item.fileId), ...added],
-      })
+      addItems(added)
       setStoredHere((current) => new Set([...current, ...added.map((item) => item.fileId!)]))
       setMessage(`${files.length} video${files.length > 1 ? 's' : ''} added. Save the playlist to keep ${files.length > 1 ? 'them' : 'it'}.`)
     } catch (caught) {
@@ -130,7 +187,7 @@ function PlaylistsPage() {
   async function save() {
     if (!draft) return
     // Rows left completely empty (like the starter row) are dropped rather than rejected.
-    const items = draft.items.filter((item) => item.title.trim() || item.url?.trim() || item.fileId)
+    const items = draft.items.filter((item) => item.title.trim() || item.url?.trim() || item.fileId || item.mediaId)
     const problem = problemWith(draft.name, items)
     setIsError(Boolean(problem))
     setMessage(problem ?? '')
@@ -141,6 +198,7 @@ function PlaylistsPage() {
       const saved = await api<Playlist>(draft.id ? `/studio/playlists/${draft.id}` : '/studio/playlists', { method: draft.id ? 'PUT' : 'POST', body })
       await load()
       open(saved)
+      loadLibrary()
       setMessage('Playlist saved.')
     } catch (caught) {
       setIsError(true)
@@ -193,6 +251,28 @@ function PlaylistsPage() {
               ))}
             </div>
           )}
+          <div className="control-panel-heading media-heading">
+            <h2><Server size={14} /> Server media</h2>
+            <span>{library ? `${formatBytes(library.used)} USED · ${formatBytes(library.free)} FREE` : ''}</span>
+          </div>
+          {!library?.items.length ? (
+            <p className="empty-note">Videos you upload appear here and can be reused in any playlist.</p>
+          ) : (
+            <ul className="media-list">
+              {library.items.map((media) => (
+                <li key={media.id}>
+                  <span className="loaded-name">
+                    <strong title={media.name}>{media.name}</strong>
+                    <small>{formatBytes(media.size)} · {media.usedBy.length ? `in ${media.usedBy.join(', ')}` : 'not in a playlist'}</small>
+                  </span>
+                  {draft && (
+                    <button className="dash-icon-button light" type="button" onClick={() => addFromLibrary(media)} aria-label={`Add ${media.name} to this playlist`} title="Add to the open playlist"><Plus size={13} /></button>
+                  )}
+                  <button className="dash-icon-button light danger" type="button" onClick={() => void deleteMedia(media)} disabled={media.usedBy.length > 0} aria-label={`Delete ${media.name}`} title={media.usedBy.length ? 'Remove it from its playlists first' : 'Delete from the server'}><Trash2 size={13} /></button>
+                </li>
+              ))}
+            </ul>
+          )}
         </section>
 
         <section className="control-panel">
@@ -214,7 +294,11 @@ function PlaylistsPage() {
                     <span className="channel-number">{String(index + 1).padStart(2, '0')}</span>
                     <div className="playlist-item-fields">
                       <input className="text-input" placeholder="Title" aria-label={`Item ${index + 1} title`} value={item.title} onChange={(event) => updateItem(index, { title: event.target.value })} maxLength={120} />
-                      {item.fileId ? (
+                      {item.mediaId ? (
+                        <span className="file-pill server" title={item.fileName}>
+                          <Server size={13} /> <span>{item.fileName}</span><small>ON SERVER</small>
+                        </span>
+                      ) : item.fileId ? (
                         <span className={storedHere.has(item.fileId) ? 'file-pill' : 'file-pill missing'} title={item.fileName}>
                           <FileVideo size={13} /> <span>{item.fileName}</span>
                           <small>{storedHere.has(item.fileId) ? 'IN THIS BROWSER' : 'NOT IN THIS BROWSER'}</small>
@@ -237,16 +321,20 @@ function PlaylistsPage() {
               </ol>
 
               <div className="capture-actions">
+                <button className="capture-button primary" type="button" onClick={() => uploadInput.current?.click()} disabled={busy}>
+                  <Upload size={14} /> UPLOAD VIDEOS
+                </button>
                 <button className="capture-button" type="button" onClick={() => fileInput.current?.click()} disabled={busy}>
-                  <Upload size={14} /> ADD VIDEO FILES
+                  <HardDrive size={14} /> ADD TO THIS BROWSER ONLY
                 </button>
                 <button className="capture-button" type="button" onClick={() => setDraft({ ...draft, items: [...draft.items, blankItem()] })}>
                   <ListPlus size={14} /> ADD LINK
                 </button>
+                <input ref={uploadInput} type="file" accept="video/*" multiple hidden onChange={(event) => void uploadFiles(event)} />
                 <input ref={fileInput} type="file" accept="video/*" multiple hidden onChange={(event) => void addFiles(event)} />
               </div>
               <p className="empty-note">
-                Video files are stored in this browser only and play from the Switcher (Load playlist). Scheduled playout on the server plays the linked items only.
+                Uploaded videos are stored on the server and play everywhere: on schedule and in the Switcher. Browser-only files play from the Switcher on this computer, and scheduled playout skips them.
                 {usage && <><br />{usage}</>}
               </p>
 

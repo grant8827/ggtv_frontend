@@ -45,9 +45,23 @@ export type PlaylistItem = {
   // A link to a video, or null for a file stored in a studio browser's IndexedDB (fileId).
   url: string | null
   fileId?: string
+  // A video uploaded to the server's media storage.
+  mediaId?: string
   fileName?: string
   durationMinutes: number
 }
+
+export type MediaFile = {
+  id: string
+  name: string
+  type: string
+  size: number
+  uploadedAt: string
+  usedBy: string[]
+}
+
+export type MediaLibrary = { items: MediaFile[]; used: number; free: number }
+
 
 export type Playlist = {
   id: string
@@ -93,4 +107,32 @@ export function formatTime(iso: string) {
 
 export function formatDay(iso: string) {
   return new Date(iso).toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric' })
+}
+
+// Uploads one video to the server with progress (fetch can't report upload progress).
+export function uploadMedia(file: File, onProgress: (fraction: number) => void) {
+  return new Promise<MediaFile>((resolve, reject) => {
+    const request = new XMLHttpRequest()
+    request.open('POST', '/api/studio/media')
+    request.setRequestHeader('X-GGTV-Studio', '1')
+    request.setRequestHeader('X-File-Name', encodeURIComponent(file.name))
+    request.setRequestHeader('Content-Type', file.type || 'video/mp4')
+    request.upload.onprogress = (event) => event.lengthComputable && onProgress(event.loaded / event.total)
+    request.onload = () => {
+      const data = (() => {
+        try {
+          return JSON.parse(request.responseText)
+        } catch {
+          return {}
+        }
+      })()
+      if (request.status === 201) resolve(data as MediaFile)
+      else {
+        if (request.status === 401) window.dispatchEvent(new Event(UNAUTHORIZED_EVENT))
+        reject(new ApiError(request.status, data.error ?? `Upload failed (${request.status})`))
+      }
+    }
+    request.onerror = () => reject(new ApiError(0, 'The upload was interrupted. Check your connection and try again.'))
+    request.send(file)
+  })
 }

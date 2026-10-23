@@ -165,3 +165,9 @@
 .loaded-name strong { display: block; font: 700 10px var(--mono); }
 .loaded-name small { display: block; overflow: hidden; margin-top: 3px; color: var(--muted); font-size: 10px; text-overflow: ellipsis; white-space: nowrap; }
 .loaded-name small.error { color: #b33a2f; }
+.file-pill.server small { color: #2c6e9b; }
+.capture-button.primary { color: var(--ink); background: #ffe7dc; border-color: #f6b9a0; }
+.media-heading { margin-top: 18px; padding-top: 14px; border-top: 1px solid var(--line); }
+.media-list { display: grid; gap: 6px; margin: 0; padding: 0; list-style: none; }
+.media-list li { display: flex; align-items: center; gap: 6px; padding: 7px 8px; background: #f6f8f6; border: 1px solid #e3e9e4; border-radius: 4px; }
+.media-list .loaded-name strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
