@@ -12,7 +12,7 @@ import LoginPage from './studio/LoginPage'
 import StudioLayout from './studio/StudioLayout'
 import SwitcherProvider from './studio/SwitcherProvider'
 import OverviewPage from './studio/OverviewPage'
-import GoLivePage from './studio/GoLivePage'
+import PreviewPage from './studio/PreviewPage'
 import SchedulePage from './studio/SchedulePage'
 import PlaylistsPage from './studio/PlaylistsPage'
 
@@ -61,8 +61,9 @@ function App() {
         <Route path="/studio/login" element={<LoginPage />} />
         <Route path="/studio" element={<RequireStudioLogin />}>
           <Route index element={<OverviewPage />} />
-          <Route path="live" element={<GoLivePage />} />
-          <Route path="switcher" element={<StudioPage />} />
+          <Route path="live" element={<StudioPage />} />
+          <Route path="preview" element={<PreviewPage />} />
+          <Route path="switcher" element={<Navigate to="/studio/live" replace />} />
           <Route path="schedule" element={<SchedulePage />} />
           <Route path="playlists" element={<PlaylistsPage />} />
           <Route path="*" element={<Navigate to="/studio" replace />} />

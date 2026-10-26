@@ -1,12 +1,12 @@
 import { NavLink, Outlet } from 'react-router-dom'
-import { CalendarClock, Clapperboard, ExternalLink, LayoutDashboard, ListVideo, LogOut, Radio, RadioTower } from 'lucide-react'
+import { CalendarClock, ExternalLink, LayoutDashboard, ListVideo, LogOut, MonitorPlay, Radio, RadioTower } from 'lucide-react'
 import { useAuth } from '../auth'
 import { useSwitcher } from './switcherContext'
 
 const links = [
   { to: '/studio', label: 'Overview', icon: LayoutDashboard, end: true },
   { to: '/studio/live', label: 'Go live', icon: RadioTower },
-  { to: '/studio/switcher', label: 'Switcher', icon: Clapperboard },
+  { to: '/studio/preview', label: 'Preview', icon: MonitorPlay },
   { to: '/studio/schedule', label: 'Schedule', icon: CalendarClock },
   { to: '/studio/playlists', label: 'Playlists', icon: ListVideo },
 ]
@@ -15,8 +15,7 @@ function StudioLayout() {
   const { user, logout } = useAuth()
   const { output, live } = useSwitcher()
   const badges: Record<string, string | null> = {
-    '/studio/live': live?.isLive ? 'ON AIR' : null,
-    '/studio/switcher': output.state === 'streaming' ? 'SENDING' : null,
+    '/studio/live': live?.isLive ? 'ON AIR' : output.state === 'streaming' ? 'SENDING' : null,
   }
 
   return (

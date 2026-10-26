@@ -152,7 +152,7 @@ export function useSwitcherOutput(canvasRef: RefObject<HTMLCanvasElement | null>
       media.start(CHUNK_MS)
       recorder.current = media
       setState('streaming')
-      setMessage('Program output is reaching the origin. Press Go live on the Go Live page to put it on air.')
+      setMessage('Program output is reaching the origin. Press GO LIVE to put it on air.')
     }
 
     ws.onclose = (event) => {

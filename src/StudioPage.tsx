@@ -108,8 +108,8 @@ function StudioPage() {
     <main className="studio-page">
       <header className="studio-heading">
         <div>
-          <div className="eyebrow"><Radio size={13} /> GGTV STUDIO <span>/</span> SWITCHER</div>
-          <h1>Studio switcher</h1>
+          <div className="eyebrow"><Radio size={13} /> GGTV STUDIO <span>/</span> GO LIVE</div>
+          <h1>Go live</h1>
         </div>
         <div className="heading-badges">
           {live?.isLive && <div className="on-air-badge live"><span className="status-light" /> ON AIR</div>}

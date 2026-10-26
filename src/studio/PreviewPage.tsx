@@ -33,7 +33,7 @@ function CopyField({ label, value, secret = false }: { label: string; value: str
   )
 }
 
-function GoLivePage() {
+function PreviewPage() {
   const [live, setLive] = useState<StudioLive | null>(null)
   const [title, setTitle] = useState('')
   const [description, setDescription] = useState('')
@@ -91,8 +91,8 @@ function GoLivePage() {
     <main className="studio-page">
       <header className="studio-heading">
         <div>
-          <div className="eyebrow">GGTV STUDIO <span>/</span> GO LIVE</div>
-          <h1>Live broadcast</h1>
+          <div className="eyebrow">GGTV STUDIO <span>/</span> PREVIEW</div>
+          <h1>Preview</h1>
         </div>
         <div className={live?.isLive ? 'on-air-badge live' : 'on-air-badge'}>
           <span className="status-light" /> {live?.isLive ? `ON AIR SINCE ${formatTime(live.startedAt!)}` : 'OFF AIR'}
@@ -117,12 +117,12 @@ function GoLivePage() {
             </label>
             <p className={output.state === 'streaming' ? 'switcher-status sending' : 'switcher-status'}>
               {output.state === 'streaming'
-                ? <>Switcher output is sending PROGRAM to the server. <Link to="/studio/switcher">Open Switcher</Link></>
-                : <>Switcher output is off. <Link to="/studio/switcher">Start it on the Switcher</Link>, or stream from OBS.</>}
+                ? <>The studio output is sending PROGRAM to the server. <Link to="/studio/live">Open Go live</Link></>
+                : <>The studio output is off. <Link to="/studio/live">Start it on Go live</Link>, or stream from OBS.</>}
             </p>
             {live && !live.encoderConnected && (
               <p className="form-error" role="note">
-                No video is coming in. Start the output on the <Link to="/studio/switcher">Switcher</Link> or start streaming from OBS first, then go live.
+                No video is coming in. Start the output on <Link to="/studio/live">Go live</Link> or start streaming from OBS first, then go live.
               </p>
             )}
             <div className="graphics-actions">
@@ -157,4 +157,4 @@ function GoLivePage() {
   )
 }
 
-export default GoLivePage
+export default PreviewPage
