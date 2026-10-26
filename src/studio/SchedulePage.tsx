@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState, type ChangeEvent, type FormEvent } from 'react'
-import { ArrowDown, ArrowUp, CalendarPlus, Link2, Pencil, Plus, Server, Trash2, Upload, X } from 'lucide-react'
+import { ArrowDown, ArrowUp, CalendarPlus, Link2, Pencil, Plus, Radio, Server, Trash2, Upload, X } from 'lucide-react'
 import {
   api, describeEntry, errorMessage, formatDay, formatTime, uploadMedia,
-  type MediaLibrary, type Playlist, type PlaylistItem, type ScheduleEntry, type ScheduleKind,
+  type MediaLibrary, type Playlist, type PlaylistItem, type ScheduleEntry, type ScheduleKind, type StudioLive,
 } from '../api'
 import { videoMinutes } from './mediaStore'
 
@@ -19,6 +19,59 @@ type Draft = {
 const KIND_LABELS: Record<ScheduleKind, string> = { live: 'LIVE SHOW', playlist: 'PLAYLIST', break: 'BREAK' }
 const newId = () => `new-${Date.now()}-${Math.random().toString(36).slice(2)}`
 const totalMinutes = (items: PlaylistItem[]) => items.reduce((sum, item) => sum + (Number(item.durationMinutes) || 0), 0)
+
+// The server's own channel: what plays when nobody is live from the studio.
+function OffAirChannel({ playlists }: { playlists: Playlist[] }) {
+  const [fillPlaylistId, setFillPlaylistId] = useState<string | null>(null)
+  const [live, setLive] = useState<StudioLive | null>(null)
+  const [note, setNote] = useState('')
+
+  useEffect(() => {
+    api<{ fillPlaylistId: string }>('/studio/channel').then((channel) => setFillPlaylistId(channel.fillPlaylistId)).catch(() => undefined)
+    const refresh = () => api<StudioLive>('/studio/live').then(setLive).catch(() => undefined)
+    void refresh()
+    const timer = window.setInterval(refresh, 5000)
+    return () => window.clearInterval(timer)
+  }, [])
+
+  async function choose(id: string) {
+    setFillPlaylistId(id)
+    try {
+      await api('/studio/channel', { method: 'PUT', body: { fillPlaylistId: id } })
+      setNote(id ? 'Saved. The server plays this whenever nobody is live from the studio.' : 'Saved. The channel is off air when nobody is live and nothing is scheduled.')
+    } catch (caught) {
+      setNote(errorMessage(caught))
+    }
+  }
+
+  const playout = live?.playout
+  const now = live?.isLive ? 'The studio is live, so the server channel is paused.'
+    : playout?.state === 'playing' || playout?.state === 'starting'
+      ? `${playout.kind === 'break' ? 'Break' : playout.kind === 'slot' ? 'Scheduled' : 'Fill'}: "${playout.slotTitle}"${playout.itemTitle ? ` · ${playout.itemTitle}` : ''}`
+      : playout?.state === 'error' ? `Can't play: ${playout.error}` : 'Nothing playing (off air).'
+
+  return (
+    <section className="control-panel dash-section off-air-panel">
+      <div className="control-panel-heading"><h2><Radio size={14} /> Off-air channel</h2><span>RUNS ON THE SERVER · NO STUDIO NEEDED</span></div>
+      <div className="off-air-grid">
+        <label className="field-label">Fill playlist when nobody is live
+          <select className="text-input" value={fillPlaylistId ?? ''} onChange={(event) => void choose(event.target.value)} disabled={fillPlaylistId === null}>
+            <option value="">None (off air between shows)</option>
+            {playlists.map((playlist) => <option key={playlist.id} value={playlist.id}>{playlist.name}</option>)}
+          </select>
+        </label>
+        <p className={`automation-status mode-${live?.isLive ? 'live' : playout?.kind === 'break' ? 'break' : playout?.kind === 'slot' ? 'playlist' : playout?.state === 'playing' ? 'fill' : 'off'}`}>
+          <strong>NOW</strong> {now}
+        </p>
+      </div>
+      <p className="empty-note">
+        With the studio closed, the server plays breaks and playlist slots on time and this fill playlist in between (resuming where it paused).
+        Live shows need the studio's Go live. Uploaded videos and links play here; browser-only files don't. The fill runs around the clock, which uses server CPU.
+        {note && <><br /><strong>{note}</strong></>}
+      </p>
+    </section>
+  )
+}
 
 // The videos a break plays once, picked like playlist items: uploaded videos or links.
 function BreakVideos({ items, onChange, library, onUploaded, setMessage }: {
@@ -258,6 +311,8 @@ function SchedulePage() {
           <h1>Program schedule</h1>
         </div>
       </header>
+
+      <OffAirChannel playlists={playlists} />
 
       <div className="split-grid">
         <form className="control-panel" onSubmit={save}>

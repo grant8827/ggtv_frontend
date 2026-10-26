@@ -211,3 +211,6 @@
 .rundown-row.is-break.current { background: #f3e9fb; }
 .pill-break { color: #5b2b85; background: #efe2fa; }
 .automation-status.mode-break { color: #5b2b85; background: #f3e9fb; border-color: #b07cd8; }
+.off-air-panel { margin: 0 0 14px; }
+.off-air-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 14px; align-items: end; margin-bottom: 10px; }
+@media (max-width: 800px) { .off-air-grid { grid-template-columns: minmax(0, 1fr); } }

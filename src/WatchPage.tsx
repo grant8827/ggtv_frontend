@@ -7,8 +7,6 @@ const localStream = import.meta.env.VITE_GGTV_HLS_URL ?? 'http://localhost:8080/
 
 const channels = [
   { id: '01', name: 'GGTV Live', detail: 'MAIN FEED', stream: localStream },
-  { id: '02', name: 'Studio Preview', detail: 'NO SIGNAL', stream: '' },
-  { id: '03', name: 'Replay Channel', detail: 'COMING SOON', stream: '' },
 ]
 
 function WatchPage() {
@@ -98,7 +96,7 @@ function WatchPage() {
 
         <aside>
           <section className="channel-panel">
-            <div className="panel-heading"><h2>Channel lineup</h2><span>03 FEEDS</span></div>
+            <div className="panel-heading"><h2>Channel lineup</h2><span>{String(channels.length).padStart(2, '0')} FEED{channels.length === 1 ? '' : 'S'}</span></div>
             <div className="channel-list">
               {channels.map((channel) => (
                 <button

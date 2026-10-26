@@ -13,6 +13,7 @@ export type LiveStatus = {
 
 export type PlayoutStatus = {
   state: 'idle' | 'starting' | 'playing' | 'error'
+  kind: 'break' | 'slot' | 'fill' | null
   slotTitle: string | null
   playlistName: string | null
   itemTitle: string | null

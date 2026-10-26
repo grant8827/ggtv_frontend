@@ -381,7 +381,8 @@ function SwitcherProvider({ children }: { children: ReactNode }) {
       // Once started it runs until its last video ends; it only starts inside its time window.
       const breaks = schedule.filter((entry) => entry.kind === 'break' && !finishedBreaks.current.has(entry.id))
       const activeBreak = breaks.find((entry) => players.current.has(breakSourceId(entry.id)))
-        ?? breaks.find((entry) => entry.start <= now && entry.end > now) ?? null
+        // A short break may start up to a minute late rather than be missed.
+        ?? breaks.find((entry) => entry.start <= now && Date.now() < Math.max(Date.parse(entry.end), Date.parse(entry.start) + 60000)) ?? null
       const resumeLabel = mode === 'live' ? `the live show "${slot!.title}"` : mode === 'playlist' ? `"${slot!.title}"` : mode === 'fill' ? `the fill playlist` : 'PROGRAM'
       if (activeBreak?.items?.length) {
         const breakId = activeBreak.id
