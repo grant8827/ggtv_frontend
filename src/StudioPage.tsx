@@ -231,8 +231,6 @@ function StudioPage() {
         </div>
       </section>
 
-      <AutomationPanel />
-
       <div className="studio-notice"><AlertTriangle size={15} /><span>PROGRAM shows exactly what is sent. You can switch to other tabs and studio pages while sending; closing this tab or letting the computer sleep stops the output.</span></div>
 
       <div className="monitor-grid">
@@ -261,6 +259,8 @@ function StudioPage() {
           <Square size={13} /> FTB
         </button>
       </section>
+
+      <AutomationPanel />
 
       <div className="studio-lower-grid">
         <section className="control-panel">
