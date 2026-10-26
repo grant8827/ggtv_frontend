@@ -13,7 +13,12 @@ export type PlaylistPlayer = {
 
 // Plays a playlist's items back to back (looping) in one video element that the switcher
 // draws from. Browser-stored files come from IndexedDB; links need CORS to be drawn and heard.
-export function createPlaylistPlayer(playlist: Playlist, onStatus: (text: string, isError?: boolean) => void): PlaylistPlayer {
+// Playlists loop by default; a break plays its videos once and then reports onFinished.
+export function createPlaylistPlayer(
+  playlist: Playlist,
+  onStatus: (text: string, isError?: boolean) => void,
+  { loop = true, onFinished }: { loop?: boolean; onFinished?: () => void } = {},
+): PlaylistPlayer {
   const video = document.createElement('video')
   video.playsInline = true
   video.crossOrigin = 'anonymous'
@@ -26,13 +31,25 @@ export function createPlaylistPlayer(playlist: Playlist, onStatus: (text: string
   // Each attempt to play an item gets a number, so a failure is only handled once.
   let attempt = 0
   let paused = false
+  let finished = false
+
+  // In play-once mode, reaching the end of the list finishes instead of starting over.
+  function atEnd() {
+    if (loop || index < items.length - 1) return false
+    if (!finished) {
+      finished = true
+      onStatus(`Finished all ${items.length} video${items.length > 1 ? 's' : ''}.`)
+      onFinished?.()
+    }
+    return true
+  }
 
   function fail(forAttempt: number, title: string, reason: string) {
     if (destroyed || forAttempt !== attempt) return
     attempt += 1
     failuresInRow += 1
     onStatus(`Skipped "${title}" (${reason})`, true)
-    void playNext()
+    if (!atEnd()) void playNext()
   }
 
   function release() {
@@ -43,7 +60,7 @@ export function createPlaylistPlayer(playlist: Playlist, onStatus: (text: string
   }
 
   async function playNext() {
-    if (destroyed) return
+    if (destroyed || finished) return
     if (failuresInRow >= items.length) {
       onStatus('None of this playlist\'s videos can play in this browser.', true)
       return
@@ -86,7 +103,9 @@ export function createPlaylistPlayer(playlist: Playlist, onStatus: (text: string
     }
   }
 
-  video.addEventListener('ended', () => void playNext())
+  video.addEventListener('ended', () => {
+    if (!atEnd()) void playNext()
+  })
   video.addEventListener('error', () => {
     const item = items[index]
     if (item) fail(attempt, item.title, 'the video could not be loaded')

@@ -23,6 +23,7 @@ const AUTOMATION_OFF: AutomationStatus = { mode: 'off', text: 'Automation is off
 // Automation sources: the fill playlist is keyed by playlist so changing it starts the new one.
 const fillSourceId = (playlistId: string) => `auto-fill-${playlistId}`
 const slotSourceId = (slotId: string) => `auto-slot-${slotId}`
+const breakSourceId = (breakId: string) => `auto-break-${breakId}`
 
 // The switcher setup is remembered in this browser; media itself can't be, so saved
 // sources come back offline and are reconnected (cameras automatically when allowed).
@@ -77,6 +78,8 @@ function SwitcherProvider({ children }: { children: ReactNode }) {
   const [automation, setAutomationState] = useState<Automation>({ on: false, fillPlaylistId: initial.fillPlaylistId, liveSourceId: initial.liveSourceId })
   const [automationStatus, setAutomationStatus] = useState<AutomationStatus>(AUTOMATION_OFF)
   const automationTick = useRef<() => void>(() => undefined)
+  // Breaks that have played all their videos (a break runs until done, not until a clock time).
+  const finishedBreaks = useRef(new Set<string>())
 
   const [programCanvas] = useState(createProgramCanvas)
   const canvasRef = useRef<HTMLCanvasElement | null>(programCanvas)
@@ -216,10 +219,10 @@ function SwitcherProvider({ children }: { children: ReactNode }) {
     stream.getVideoTracks()[0]?.addEventListener('ended', () => goOffline(id))
   }, [goOffline])
 
-  const startPlaylist = useCallback((id: string, playlist: Playlist) => {
+  const startPlaylist = useCallback((id: string, playlist: Playlist, options?: { loop?: boolean; onFinished?: () => void }) => {
     const player = createPlaylistPlayer(playlist, (text, isError) => {
       setPlayerStatus((current) => ({ ...current, [id]: { text, isError } }))
-    })
+    }, options)
     players.current.set(id, player)
     videos.current.set(id, player.video)
     attachAudio(id, player.video)
@@ -328,9 +331,9 @@ function SwitcherProvider({ children }: { children: ReactNode }) {
   }, [previewId, programId, programSource, previewSource, transition, cutTo])
 
   // Adds an automation-owned playlist source (once) and returns its id.
-  const ensurePlaylistSource = useCallback((id: string, playlist: Playlist, label: string) => {
+  const ensurePlaylistSource = useCallback((id: string, playlist: Playlist, label: string, options?: { loop?: boolean; onFinished?: () => void }) => {
     if (!players.current.has(id)) {
-      const element = startPlaylist(id, playlist)
+      const element = startPlaylist(id, playlist, options)
       setSources((current) => current.some((source) => source.id === id)
         ? current
         : [...current, { id, name: label, kind: 'media', element, auto: true }])
@@ -348,7 +351,8 @@ function SwitcherProvider({ children }: { children: ReactNode }) {
     automationTick.current = () => {
       if (!automation.on) return
       const now = new Date().toISOString()
-      const slot = schedule.find((entry) => entry.start <= now && entry.end > now) ?? null
+      const shows = schedule.filter((entry) => entry.kind !== 'break')
+      const slot = shows.find((entry) => entry.start <= now && entry.end > now) ?? null
       const next = schedule.find((entry) => entry.start > now) ?? null
       const fill = playlists.find((playlist) => playlist.id === automation.fillPlaylistId) ?? null
       let target: string | null = null
@@ -373,6 +377,24 @@ function SwitcherProvider({ children }: { children: ReactNode }) {
         mode = 'fill'
       }
 
+      // A break interrupts whatever would be on, plays its videos once, then hands back.
+      // Once started it runs until its last video ends; it only starts inside its time window.
+      const breaks = schedule.filter((entry) => entry.kind === 'break' && !finishedBreaks.current.has(entry.id))
+      const activeBreak = breaks.find((entry) => players.current.has(breakSourceId(entry.id)))
+        ?? breaks.find((entry) => entry.start <= now && entry.end > now) ?? null
+      const resumeLabel = mode === 'live' ? `the live show "${slot!.title}"` : mode === 'playlist' ? `"${slot!.title}"` : mode === 'fill' ? `the fill playlist` : 'PROGRAM'
+      if (activeBreak?.items?.length) {
+        const breakId = activeBreak.id
+        target = ensurePlaylistSource(breakSourceId(breakId), { id: breakId, name: activeBreak.title, items: activeBreak.items, updatedAt: '' }, `BREAK: ${activeBreak.title.toUpperCase()}`, {
+          loop: false,
+          onFinished: () => {
+            finishedBreaks.current.add(breakId)
+            automationTick.current()
+          },
+        })
+        mode = 'break'
+      }
+
       // The fill playlist pauses while anything else is on and resumes where it stopped.
       players.current.forEach((player, id) => {
         if (!id.startsWith('auto-')) return
@@ -382,22 +404,33 @@ function SwitcherProvider({ children }: { children: ReactNode }) {
       if (target && target !== programId) {
         cutTo(target, programSource)
       }
-      // Clean up sources for finished slots and old fill playlists once they are off PROGRAM.
+      // Clean up finished slots, finished breaks and replaced fill playlists once they are off
+      // PROGRAM. The current fill playlist and an unfinished slot are kept (paused) so they resume.
       sources.forEach((source) => {
         if (!source.auto || source.id === target || source.id === programId) return
-        const slotId = source.id.startsWith('auto-slot-') ? source.id.slice('auto-slot-'.length) : null
-        const ended = slotId ? !schedule.some((entry) => entry.id === slotId && entry.end > now) : true
+        let ended = true
+        if (source.id.startsWith('auto-slot-')) {
+          const slotId = source.id.slice('auto-slot-'.length)
+          ended = !schedule.some((entry) => entry.id === slotId && entry.end > now)
+        } else if (source.id.startsWith('auto-break-')) {
+          const breakId = source.id.slice('auto-break-'.length)
+          ended = finishedBreaks.current.has(breakId) || !schedule.some((entry) => entry.id === breakId)
+        } else if (source.id.startsWith('auto-fill-')) {
+          ended = source.id !== fillSourceId(automation.fillPlaylistId)
+        }
         if (ended) dropAutoSource(source.id)
       })
 
       const until = (iso: string) => new Date(iso).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-      const text = mode === 'playlist' ? `Scheduled: "${slot!.title}" until ${until(slot!.end)}`
+      const text = mode === 'break' ? `Break: "${activeBreak!.title}" (${activeBreak!.items!.length} video${activeBreak!.items!.length > 1 ? 's' : ''}), then back to ${resumeLabel}`
+        : mode === 'playlist' ? `Scheduled: "${slot!.title}" until ${until(slot!.end)}`
         : mode === 'live' ? `Live show: "${slot!.title}" until ${until(slot!.end)}`
           : mode === 'fill' ? `Fill playlist "${fill!.name}"${next ? ` until "${next.title}" at ${until(next.start)}` : ''}`
             : 'Nothing to play: choose a fill playlist or schedule something.'
-      setAutomationStatus((current) => current.text === text && current.warning === warning && current.slotId === (slot?.id ?? null)
+      const slotId = mode === 'break' ? activeBreak!.id : slot?.id ?? null
+      setAutomationStatus((current) => current.text === text && current.warning === warning && current.slotId === slotId
         ? current
-        : { mode, text, slotId: slot?.id ?? null, warning })
+        : { mode, text, slotId, warning })
     }
   })
 

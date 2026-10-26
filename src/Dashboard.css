@@ -203,3 +203,11 @@
 .pill-next { color: #2c4f75; background: #e6eef8; }
 .empty-note a { color: var(--signal-dark); font-weight: 700; }
 @media (max-width: 900px) { .automation-grid { grid-template-columns: minmax(0, 1fr); } }
+
+/* ---------- breaks ---------- */
+.computed-end { display: grid; align-content: center; height: 39px; padding: 0 11px; color: var(--ink); background: #f6f8f6; border: 1px solid var(--line); border-radius: 4px; font: 600 12px var(--mono); text-transform: none; }
+.computed-end small { color: var(--muted); font: 700 8px var(--mono); }
+.rundown-row.is-break { box-shadow: inset 3px 0 #b07cd8; padding-left: 12px; background: #faf6fd; }
+.rundown-row.is-break.current { background: #f3e9fb; }
+.pill-break { color: #5b2b85; background: #efe2fa; }
+.automation-status.mode-break { color: #5b2b85; background: #f3e9fb; border-color: #b07cd8; }

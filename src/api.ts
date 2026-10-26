@@ -26,7 +26,8 @@ export type StudioLive = LiveStatus & {
   playout: PlayoutStatus
 }
 
-export type ScheduleKind = 'live' | 'playlist'
+// A break plays its own videos once, interrupting whatever is on, then hands back.
+export type ScheduleKind = 'live' | 'playlist' | 'break'
 
 export type ScheduleEntry = {
   id: string
@@ -37,6 +38,7 @@ export type ScheduleEntry = {
   kind: ScheduleKind
   playlistId: string | null
   playlistName?: string | null
+  items?: PlaylistItem[]
 }
 
 export type PlaylistItem = {
@@ -56,6 +58,7 @@ export type MediaFile = {
   name: string
   type: string
   size: number
+  durationSeconds?: number
   uploadedAt: string
   usedBy: string[]
 }
@@ -101,6 +104,13 @@ export function errorMessage(error: unknown) {
   return 'Could not reach the GGTV control API.'
 }
 
+// How a schedule entry is labelled in rundowns.
+export function describeEntry(entry: ScheduleEntry) {
+  if (entry.kind === 'live') return 'LIVE SHOW'
+  if (entry.kind === 'break') return `BREAK · ${entry.items?.length ?? 0} VIDEO${entry.items?.length === 1 ? '' : 'S'}`
+  return `PLAYLIST · ${entry.playlistName ?? 'missing'}`
+}
+
 export function formatTime(iso: string) {
   return new Date(iso).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
 }
@@ -110,13 +120,14 @@ export function formatDay(iso: string) {
 }
 
 // Uploads one video to the server with progress (fetch can't report upload progress).
-export function uploadMedia(file: File, onProgress: (fraction: number) => void) {
+export function uploadMedia(file: File, onProgress: (fraction: number) => void, durationMinutes = 0) {
   return new Promise<MediaFile>((resolve, reject) => {
     const request = new XMLHttpRequest()
     request.open('POST', '/api/studio/media')
     request.setRequestHeader('X-GGTV-Studio', '1')
     request.setRequestHeader('X-File-Name', encodeURIComponent(file.name))
     request.setRequestHeader('Content-Type', file.type || 'video/mp4')
+    request.setRequestHeader('X-Duration-Seconds', String(Math.round(durationMinutes * 60)))
     request.upload.onprogress = (event) => event.lengthComputable && onProgress(event.loaded / event.total)
     request.onload = () => {
       const data = (() => {

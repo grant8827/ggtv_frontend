@@ -55,7 +55,7 @@ export type Automation = {
 }
 
 export type AutomationStatus = {
-  mode: 'off' | 'idle' | 'fill' | 'playlist' | 'live'
+  mode: 'off' | 'idle' | 'fill' | 'playlist' | 'live' | 'break'
   text: string
   slotId: string | null
   warning: string | null

@@ -78,7 +78,7 @@ function PlaylistsPage() {
         const durationMinutes = await videoMinutes(file)
         const media = await uploadMedia(file, (fraction) => {
           setMessage(`Uploading ${file.name} (${index + 1} of ${files.length}) · ${Math.round(fraction * 100)}%`)
-        })
+        }, durationMinutes)
         added.push({ id: newId(), title: titleFrom(file.name), url: null, mediaId: media.id, fileName: media.name, durationMinutes })
       }
       setMessage(`${files.length} video${files.length > 1 ? 's' : ''} uploaded. Save the playlist to add ${files.length > 1 ? 'them' : 'it'}.`)
@@ -93,7 +93,8 @@ function PlaylistsPage() {
   }
 
   function addFromLibrary(media: MediaFile) {
-    addItems([{ id: newId(), title: titleFrom(media.name), url: null, mediaId: media.id, fileName: media.name, durationMinutes: 0 }])
+    const durationMinutes = Math.round(((media.durationSeconds ?? 0) / 60) * 100) / 100
+    addItems([{ id: newId(), title: titleFrom(media.name), url: null, mediaId: media.id, fileName: media.name, durationMinutes }])
   }
 
   async function deleteMedia(media: MediaFile) {

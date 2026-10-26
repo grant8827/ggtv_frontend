@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { ArrowRight, CalendarClock, ListVideo, Plug, RadioTower } from 'lucide-react'
-import { api, errorMessage, formatDay, formatTime, type Playlist, type ScheduleEntry, type StudioLive } from '../api'
+import { api, describeEntry, errorMessage, formatDay, formatTime, type Playlist, type ScheduleEntry, type StudioLive } from '../api'
 
 function OverviewPage() {
   const [live, setLive] = useState<StudioLive | null>(null)
@@ -78,7 +78,7 @@ function OverviewPage() {
             {upcoming.slice(0, 8).map((entry) => (
               <li key={entry.id} className={entry === onNow ? 'rundown-row current' : 'rundown-row'}>
                 <span className="rundown-time">{formatDay(entry.start)}<br />{formatTime(entry.start)}–{formatTime(entry.end)}</span>
-                <span className="rundown-copy"><strong>{entry.title}</strong><small>{entry.kind === 'live' ? 'LIVE' : `PLAYLIST · ${entry.playlistName ?? 'missing'}`}</small></span>
+                <span className="rundown-copy"><strong>{entry.title}</strong><small>{describeEntry(entry)}</small></span>
                 {entry === onNow && <span className="pill pill-live">NOW</span>}
               </li>
             ))}

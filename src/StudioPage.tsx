@@ -19,7 +19,7 @@ import {
   Video,
   X,
 } from 'lucide-react'
-import { formatDay, formatTime } from './api'
+import { describeEntry, formatDay, formatTime } from './api'
 import { OUTPUT_HEIGHT, OUTPUT_WIDTH, type Source } from './studio/programCompositor'
 import { useSwitcher } from './studio/switcherContext'
 
@@ -168,11 +168,11 @@ function AutomationPanel() {
               {upcoming.map((entry) => {
                 const isNow = entry.start <= nowIso
                 return (
-                  <li key={entry.id} className={isNow ? 'rundown-row current' : 'rundown-row'}>
+                  <li key={entry.id} className={['rundown-row', isNow ? 'current' : '', entry.kind === 'break' ? 'is-break' : ''].join(' ')}>
                     <span className="rundown-time">{formatDay(entry.start)}<br />{formatTime(entry.start)}–{formatTime(entry.end)}</span>
                     <span className="rundown-copy">
                       <strong>{entry.title}</strong>
-                      <small>{entry.kind === 'live' ? 'LIVE SHOW' : `PLAYLIST · ${entry.playlistName ?? 'missing'}`}</small>
+                      <small>{describeEntry(entry)}</small>
                     </span>
                     {isNow ? <span className="pill pill-live">NOW</span> : entry === next ? <span className="pill pill-next">{countdown(entry.start, now)}</span> : null}
                   </li>

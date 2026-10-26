@@ -1,6 +1,10 @@
-import { useEffect, useState, type FormEvent } from 'react'
-import { CalendarPlus, Pencil, Trash2, X } from 'lucide-react'
-import { api, errorMessage, formatDay, formatTime, type Playlist, type ScheduleEntry, type ScheduleKind } from '../api'
+import { useEffect, useRef, useState, type ChangeEvent, type FormEvent } from 'react'
+import { ArrowDown, ArrowUp, CalendarPlus, Link2, Pencil, Plus, Server, Trash2, Upload, X } from 'lucide-react'
+import {
+  api, describeEntry, errorMessage, formatDay, formatTime, uploadMedia,
+  type MediaLibrary, type Playlist, type PlaylistItem, type ScheduleEntry, type ScheduleKind,
+} from '../api'
+import { videoMinutes } from './mediaStore'
 
 type Draft = {
   title: string
@@ -9,6 +13,108 @@ type Draft = {
   end: string
   kind: ScheduleKind
   playlistId: string
+  items: PlaylistItem[]
+}
+
+const KIND_LABELS: Record<ScheduleKind, string> = { live: 'LIVE SHOW', playlist: 'PLAYLIST', break: 'BREAK' }
+const newId = () => `new-${Date.now()}-${Math.random().toString(36).slice(2)}`
+const totalMinutes = (items: PlaylistItem[]) => items.reduce((sum, item) => sum + (Number(item.durationMinutes) || 0), 0)
+
+// The videos a break plays once, picked like playlist items: uploaded videos or links.
+function BreakVideos({ items, onChange, library, onUploaded, setMessage }: {
+  items: PlaylistItem[]
+  onChange: (items: PlaylistItem[]) => void
+  library: MediaLibrary | null
+  onUploaded: () => void
+  setMessage: (text: string) => void
+}) {
+  const [mediaId, setMediaId] = useState('')
+  const [uploading, setUploading] = useState(false)
+  const uploadInput = useRef<HTMLInputElement>(null)
+
+  const update = (index: number, patch: Partial<PlaylistItem>) => onChange(items.map((item, i) => i === index ? { ...item, ...patch } : item))
+  const move = (index: number, offset: number) => {
+    const next = [...items]
+    const target = index + offset
+    if (target < 0 || target >= next.length) return
+    ;[next[index], next[target]] = [next[target], next[index]]
+    onChange(next)
+  }
+
+  function addFromLibrary() {
+    const media = library?.items.find((item) => item.id === mediaId)
+    if (!media) return
+    const durationMinutes = Math.round(((media.durationSeconds ?? 0) / 60) * 100) / 100
+    onChange([...items, { id: newId(), title: media.name.replace(/\.[^.]+$/, '').slice(0, 120), url: null, mediaId: media.id, fileName: media.name, durationMinutes }])
+    setMediaId('')
+  }
+
+  async function upload(event: ChangeEvent<HTMLInputElement>) {
+    const files = [...(event.target.files ?? [])]
+    event.target.value = ''
+    if (!files.length) return
+    setUploading(true)
+    const added: PlaylistItem[] = []
+    try {
+      for (const [index, file] of files.entries()) {
+        const durationMinutes = await videoMinutes(file)
+        const media = await uploadMedia(file, (fraction) => setMessage(`Uploading ${file.name} (${index + 1} of ${files.length}) · ${Math.round(fraction * 100)}%`), durationMinutes)
+        added.push({ id: newId(), title: file.name.replace(/\.[^.]+$/, '').slice(0, 120), url: null, mediaId: media.id, fileName: media.name, durationMinutes })
+      }
+      setMessage(`${added.length} video${added.length > 1 ? 's' : ''} uploaded and added to the break.`)
+    } catch (caught) {
+      setMessage(errorMessage(caught))
+    } finally {
+      onChange([...items, ...added])
+      setUploading(false)
+      onUploaded()
+    }
+  }
+
+  return (
+    <div className="field-label">Break videos (play once, in order)
+      {items.length === 0 ? (
+        <p className="empty-note">No videos yet. Add uploaded videos, upload new ones, or add a link.</p>
+      ) : (
+        <ol className="playlist-items">
+          {items.map((item, index) => (
+            <li key={item.id ?? index} className="playlist-item">
+              <span className="channel-number">{String(index + 1).padStart(2, '0')}</span>
+              <div className="playlist-item-fields">
+                <input className="text-input" placeholder="Title" aria-label={`Break video ${index + 1} title`} value={item.title} onChange={(event) => update(index, { title: event.target.value })} maxLength={120} />
+                {item.mediaId ? (
+                  <span className="file-pill server" title={item.fileName}><Server size={13} /> <span>{item.fileName}</span><small>ON SERVER</small></span>
+                ) : (
+                  <input className="text-input" placeholder="https://media.example/video.mp4" aria-label={`Break video ${index + 1} URL`} type="url" value={item.url ?? ''} onChange={(event) => update(index, { url: event.target.value })} />
+                )}
+                <label className="minutes-field">
+                  <input className="text-input" type="number" min="0" max="1440" step="0.25" aria-label={`Break video ${index + 1} minutes`} value={item.durationMinutes} onChange={(event) => update(index, { durationMinutes: Number(event.target.value) })} />
+                  <span>MIN</span>
+                </label>
+              </div>
+              <div className="playlist-item-actions">
+                <button className="dash-icon-button light" type="button" onClick={() => move(index, -1)} disabled={index === 0} aria-label="Move up"><ArrowUp size={13} /></button>
+                <button className="dash-icon-button light" type="button" onClick={() => move(index, 1)} disabled={index === items.length - 1} aria-label="Move down"><ArrowDown size={13} /></button>
+                <button className="dash-icon-button light danger" type="button" onClick={() => onChange(items.filter((_, i) => i !== index))} aria-label="Remove video"><X size={13} /></button>
+              </div>
+            </li>
+          ))}
+        </ol>
+      )}
+      <div className="playlist-loader">
+        <select className="text-input" aria-label="Uploaded video to add" value={mediaId} onChange={(event) => setMediaId(event.target.value)}>
+          <option value="">{library?.items.length ? 'Choose an uploaded video…' : 'No uploaded videos yet'}</option>
+          {library?.items.map((media) => <option key={media.id} value={media.id}>{media.name}</option>)}
+        </select>
+        <button className="capture-button" type="button" onClick={addFromLibrary} disabled={!mediaId}><Plus size={14} /> ADD</button>
+      </div>
+      <div className="capture-actions">
+        <button className="capture-button primary" type="button" onClick={() => uploadInput.current?.click()} disabled={uploading}><Upload size={14} /> UPLOAD VIDEOS</button>
+        <button className="capture-button" type="button" onClick={() => onChange([...items, { id: newId(), title: '', url: '', durationMinutes: 0 }])}><Link2 size={14} /> ADD LINK</button>
+        <input ref={uploadInput} type="file" accept="video/*" multiple hidden onChange={(event) => void upload(event)} />
+      </div>
+    </div>
+  )
 }
 
 function toLocalInput(date: Date) {
@@ -27,6 +133,7 @@ function emptyDraft(): Draft {
     end: toLocalInput(new Date(start.getTime() + 60 * 60000)),
     kind: 'live',
     playlistId: '',
+    items: [],
   }
 }
 
@@ -42,6 +149,15 @@ function SchedulePage() {
   const [showPast, setShowPast] = useState(false)
   const [busy, setBusy] = useState(false)
   const [message, setMessage] = useState('')
+  const [library, setLibrary] = useState<MediaLibrary | null>(null)
+
+  function loadLibrary() {
+    api<MediaLibrary>('/studio/media').then(setLibrary).catch(() => undefined)
+  }
+
+  useEffect(() => {
+    api<MediaLibrary>('/studio/media').then(setLibrary).catch(() => undefined)
+  }, [])
 
   async function load() {
     const [schedule, lists] = await fetchScheduleData()
@@ -71,6 +187,7 @@ function SchedulePage() {
       end: toLocalInput(new Date(entry.end)),
       kind: entry.kind,
       playlistId: entry.playlistId ?? '',
+      items: (entry.items ?? []).map((item) => ({ ...item })),
     })
     setMessage('')
   }
@@ -82,6 +199,17 @@ function SchedulePage() {
 
   async function save(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
+    const items = draft.items.filter((item) => item.title.trim() || item.url?.trim() || item.mediaId)
+    if (draft.kind === 'break') {
+      const problem = !items.length ? 'Add at least one video to the break.'
+        : items.findIndex((item) => !item.title.trim()) >= 0 ? `Video ${items.findIndex((item) => !item.title.trim()) + 1} needs a title.`
+          : items.findIndex((item) => !item.mediaId && !item.url?.trim()) >= 0 ? `Video ${items.findIndex((item) => !item.mediaId && !item.url?.trim()) + 1} needs a link.`
+            : null
+      if (problem) {
+        setMessage(problem)
+        return
+      }
+    }
     setBusy(true)
     setMessage('')
     try {
@@ -90,9 +218,10 @@ function SchedulePage() {
         start: new Date(draft.start).toISOString(),
         end: new Date(draft.end).toISOString(),
         playlistId: draft.kind === 'playlist' ? draft.playlistId : null,
+        items: draft.kind === 'break' ? items : undefined,
       }
       await api(editingId ? `/studio/schedule/${editingId}` : '/studio/schedule', { method: editingId ? 'PUT' : 'POST', body })
-      setMessage(editingId ? 'Slot updated.' : 'Slot added to the schedule.')
+      setMessage(draft.kind === 'break' ? 'Break saved. Go live plays it when its time comes (automation on).' : editingId ? 'Slot updated.' : 'Slot added to the schedule.')
       reset()
       await load()
     } catch (caught) {
@@ -140,23 +269,38 @@ function SchedulePage() {
             <label className="field-label">Program title
               <input className="text-input" value={draft.title} onChange={(event) => update('title', event.target.value)} maxLength={120} required />
             </label>
-            <div className="field-row">
-              <label className="field-label">Starts
-                <input className="text-input" type="datetime-local" value={draft.start} onChange={(event) => update('start', event.target.value)} required />
-              </label>
-              <label className="field-label">Ends
-                <input className="text-input" type="datetime-local" value={draft.end} onChange={(event) => update('end', event.target.value)} required />
-              </label>
-            </div>
-            <div className="field-label">Source
-              <div className="transition-options" role="group" aria-label="Slot source">
-                {(['live', 'playlist'] as const).map((kind) => (
+            <div className="field-label">Type
+              <div className="transition-options" role="group" aria-label="Slot type">
+                {(['live', 'playlist', 'break'] as const).map((kind) => (
                   <button key={kind} type="button" className={draft.kind === kind ? 'transition-option selected' : 'transition-option'} aria-pressed={draft.kind === kind} onClick={() => update('kind', kind)}>
-                    {kind === 'live' ? 'LIVE SHOW' : 'PLAYLIST'}
+                    {KIND_LABELS[kind]}
                   </button>
                 ))}
               </div>
             </div>
+            <div className="field-row">
+              <label className="field-label">Starts
+                <input className="text-input" type="datetime-local" value={draft.start} onChange={(event) => update('start', event.target.value)} required />
+              </label>
+              {draft.kind === 'break' ? (
+                <div className="field-label">Ends about
+                  <span className="computed-end">
+                    {draft.start ? formatTime(new Date(Date.parse(draft.start) + (totalMinutes(draft.items) || 1) * 60000).toISOString()) : '—'}
+                    <small>{totalMinutes(draft.items).toFixed(1)} MIN OF VIDEO</small>
+                  </span>
+                </div>
+              ) : (
+                <label className="field-label">Ends
+                  <input className="text-input" type="datetime-local" value={draft.end} onChange={(event) => update('end', event.target.value)} required />
+                </label>
+              )}
+            </div>
+            {draft.kind === 'break' && (
+              <>
+                <p className="empty-note">A break interrupts whatever is on air in Go live (the playlist or a live show), plays these videos once, then goes back to what it paused.</p>
+                <BreakVideos items={draft.items} onChange={(items) => update('items', items)} library={library} onUploaded={loadLibrary} setMessage={setMessage} />
+              </>
+            )}
             {draft.kind === 'playlist' && (
               <label className="field-label">Playlist
                 <select className="text-input" value={draft.playlistId} onChange={(event) => update('playlistId', event.target.value)} required>
@@ -190,11 +334,11 @@ function SchedulePage() {
                   {dayEntries.map((entry) => {
                     const isNow = entry.start <= now && entry.end > now
                     return (
-                      <li key={entry.id} className={[isNow ? 'current' : '', entry.id === editingId ? 'editing' : '', 'rundown-row'].join(' ')}>
+                      <li key={entry.id} className={[isNow ? 'current' : '', entry.id === editingId ? 'editing' : '', entry.kind === 'break' ? 'is-break' : '', 'rundown-row'].join(' ')}>
                         <span className="rundown-time">{formatTime(entry.start)}<br />{formatTime(entry.end)}</span>
                         <span className="rundown-copy">
                           <strong>{entry.title}</strong>
-                          <small>{entry.kind === 'live' ? 'LIVE SHOW' : `PLAYLIST · ${entry.playlistName ?? 'missing'}`}</small>
+                          <small>{describeEntry(entry)}</small>
                         </span>
                         {isNow && <span className="pill pill-live">NOW</span>}
                         <button className="dash-icon-button light" type="button" onClick={() => edit(entry)} aria-label={`Edit ${entry.title}`}><Pencil size={13} /></button>
