@@ -260,8 +260,6 @@ function StudioPage() {
         </button>
       </section>
 
-      <AutomationPanel />
-
       <div className="studio-lower-grid">
         <section className="control-panel">
           <div className="control-panel-heading"><h2>Input bank</h2><span>{sources.length.toString().padStart(2, '0')} SOURCES · SAVED IN THIS BROWSER</span></div>
@@ -341,6 +339,8 @@ function StudioPage() {
           </div>
         </section>
       </div>
+
+      <AutomationPanel />
 
       <footer className="studio-footer"><span><Signal size={12} /> PVW {previewSource.name}</span><span>PGM {programSource.name} {switcher.isBlack ? '· BLACK' : ''}</span></footer>
     </main>

@@ -190,7 +190,7 @@
 @media (max-width: 800px) { .nav-badge { display: none; } .tile-remove { opacity: 1; } }
 
 /* ---------- automation ---------- */
-.automation-panel { margin: 0; }
+.automation-panel { margin-top: 14px; }
 .automation-toggle { min-height: 34px; }
 .automation-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.1fr); gap: 18px; }
 .automation-status { margin: 0; padding: 10px 12px; color: #53615a; background: #eef2ef; border-left: 3px solid #8e9b95; border-radius: 3px; font-size: 12px; line-height: 1.5; }
