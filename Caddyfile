@@ -28,6 +28,13 @@
 		file_server
 	}
 
+	# Caddy doesn't know this extension; browsers expect the manifest type.
+	handle /manifest.webmanifest {
+		header Content-Type "application/manifest+json"
+		header Cache-Control "no-cache"
+		file_server
+	}
+
 	# Everything else is the single-page app, so /studio/... routes load index.html.
 	handle {
 		header Cache-Control "no-cache"
