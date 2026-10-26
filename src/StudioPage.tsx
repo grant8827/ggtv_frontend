@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
+import { Link } from 'react-router-dom'
 import {
   AlertTriangle,
+  Bot,
   Camera,
   Captions,
   ListVideo,
@@ -17,6 +19,7 @@ import {
   Video,
   X,
 } from 'lucide-react'
+import { formatDay, formatTime } from './api'
 import { OUTPUT_HEIGHT, OUTPUT_WIDTH, type Source } from './studio/programCompositor'
 import { useSwitcher } from './studio/switcherContext'
 
@@ -96,6 +99,93 @@ function ProgramMonitor() {
   )
 }
 
+function countdown(toIso: string, now: number) {
+  const seconds = Math.max(0, Math.round((Date.parse(toIso) - now) / 1000))
+  const hours = Math.floor(seconds / 3600)
+  const minutes = Math.floor((seconds % 3600) / 60)
+  const secs = String(seconds % 60).padStart(2, '0')
+  return hours ? `${hours}h ${String(minutes).padStart(2, '0')}m` : `${minutes}:${secs}`
+}
+
+// Plays the fill playlist, and hands PROGRAM to scheduled shows when their time comes.
+function AutomationPanel() {
+  const { automation, setAutomation, automationStatus, schedule, playlists, sources } = useSwitcher()
+  const [now, setNow] = useState(() => Date.now())
+
+  useEffect(() => {
+    const timer = window.setInterval(() => setNow(Date.now()), 1000)
+    return () => window.clearInterval(timer)
+  }, [])
+
+  const nowIso = new Date(now).toISOString()
+  const upcoming = schedule.filter((entry) => entry.end > nowIso).slice(0, 6)
+  const next = upcoming.find((entry) => entry.start > nowIso)
+  const liveInputs = sources.filter((source) => source.kind === 'camera' || source.kind === 'screen')
+
+  return (
+    <section className="control-panel automation-panel" aria-label="Schedule automation">
+      <div className="control-panel-heading">
+        <h2><Bot size={14} /> Automation</h2>
+        <button
+          className={automation.on ? 'button button-danger automation-toggle' : 'button button-primary automation-toggle'}
+          type="button"
+          onClick={() => setAutomation({ on: !automation.on })}
+          aria-pressed={automation.on}
+        >
+          {automation.on ? 'TURN AUTOMATION OFF' : 'TURN AUTOMATION ON'}
+        </button>
+      </div>
+      <div className="automation-grid">
+        <div className="graphics-form">
+          <label className="field-label">Fill playlist (plays between shows)
+            <select className="text-input" value={automation.fillPlaylistId} onChange={(event) => setAutomation({ fillPlaylistId: event.target.value })}>
+              <option value="">None</option>
+              {playlists.map((playlist) => <option key={playlist.id} value={playlist.id}>{playlist.name} ({playlist.items.length})</option>)}
+            </select>
+          </label>
+          <label className="field-label">Live shows cut to
+            <select className="text-input" value={automation.liveSourceId} onChange={(event) => setAutomation({ liveSourceId: event.target.value })}>
+              <option value="">{liveInputs.length ? 'Choose a camera or screen…' : 'Add a camera or screen first'}</option>
+              {liveInputs.map((source) => <option key={source.id} value={source.id}>{source.name}{source.offline ? ' (offline)' : ''}</option>)}
+            </select>
+          </label>
+          <p className={`automation-status mode-${automationStatus.mode}`} role="status">
+            <strong>{automation.on ? 'NOW' : 'OFF'}</strong> {automationStatus.text}
+            {next && automation.on && <><br /><span>Next: "{next.title}" in {countdown(next.start, now)}</span></>}
+          </p>
+          {automationStatus.warning && <p className="form-error">{automationStatus.warning}</p>}
+          <p className="empty-note">
+            Build playlists on <Link to="/studio/playlists">Playlists</Link> and set show times on <Link to="/studio/schedule">Schedule</Link>.
+            While automation is on it controls PROGRAM; start the output and go live as usual.
+          </p>
+        </div>
+        <div>
+          <div className="rundown-heading">RUNDOWN</div>
+          {upcoming.length === 0 ? (
+            <p className="empty-note">Nothing scheduled. The fill playlist plays all day.</p>
+          ) : (
+            <ol className="rundown">
+              {upcoming.map((entry) => {
+                const isNow = entry.start <= nowIso
+                return (
+                  <li key={entry.id} className={isNow ? 'rundown-row current' : 'rundown-row'}>
+                    <span className="rundown-time">{formatDay(entry.start)}<br />{formatTime(entry.start)}–{formatTime(entry.end)}</span>
+                    <span className="rundown-copy">
+                      <strong>{entry.title}</strong>
+                      <small>{entry.kind === 'live' ? 'LIVE SHOW' : `PLAYLIST · ${entry.playlistName ?? 'missing'}`}</small>
+                    </span>
+                    {isNow ? <span className="pill pill-live">NOW</span> : entry === next ? <span className="pill pill-next">{countdown(entry.start, now)}</span> : null}
+                  </li>
+                )
+              })}
+            </ol>
+          )}
+        </div>
+      </div>
+    </section>
+  )
+}
+
 function StudioPage() {
   const switcher = useSwitcher()
   const { output, live, sources, previewSource, programSource } = switcher
@@ -140,6 +230,8 @@ function StudioPage() {
           )}
         </div>
       </section>
+
+      <AutomationPanel />
 
       <div className="studio-notice"><AlertTriangle size={15} /><span>PROGRAM shows exactly what is sent. You can switch to other tabs and studio pages while sending; closing this tab or letting the computer sleep stops the output.</span></div>
 

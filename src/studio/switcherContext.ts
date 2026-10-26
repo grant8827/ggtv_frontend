@@ -1,5 +1,5 @@
 import { createContext, useContext } from 'react'
-import type { Playlist, StudioLive } from '../api'
+import type { Playlist, ScheduleEntry, StudioLive } from '../api'
 import type { Source } from './programCompositor'
 import type { useSwitcherOutput } from './useSwitcherOutput'
 
@@ -40,6 +40,25 @@ export type Switcher = {
   liveBusy: boolean
   goLive: () => Promise<void>
   endBroadcast: () => Promise<void>
+  schedule: ScheduleEntry[]
+  automation: Automation
+  setAutomation: (patch: Partial<Automation>) => void
+  automationStatus: AutomationStatus
+}
+
+export type Automation = {
+  on: boolean
+  // Plays whenever no scheduled show is on, and resumes where it paused.
+  fillPlaylistId: string
+  // The input that scheduled live shows cut to (a camera or screen share).
+  liveSourceId: string
+}
+
+export type AutomationStatus = {
+  mode: 'off' | 'idle' | 'fill' | 'playlist' | 'live'
+  text: string
+  slotId: string | null
+  warning: string | null
 }
 
 export const SwitcherContext = createContext<Switcher | null>(null)

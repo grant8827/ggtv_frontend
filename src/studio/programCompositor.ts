@@ -11,6 +11,8 @@ export type Source = {
   // What to reconnect after a reload; saved sources start offline until reconnected.
   saved?: SavedSource
   offline?: boolean
+  // Added and removed by schedule automation rather than by the operator.
+  auto?: boolean
 }
 
 export type SavedSource =

@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
-import { api, errorMessage, type Playlist, type StudioLive } from '../api'
+import { api, errorMessage, type Playlist, type ScheduleEntry, type StudioLive } from '../api'
 import { createPlaylistPlayer, type PlaylistPlayer } from './playlistPlayer'
 import { drawProgram, OUTPUT_HEIGHT, OUTPUT_WIDTH, type ProgramScene, type SavedSource, type Source, type Transition } from './programCompositor'
-import { SwitcherContext, type Switcher } from './switcherContext'
+import { SwitcherContext, type Automation, type AutomationStatus, type Switcher } from './switcherContext'
 import { useSwitcherOutput } from './useSwitcherOutput'
 
 const STORAGE_KEY = 'ggtv-switcher-v1'
@@ -15,12 +15,22 @@ type SavedSetup = {
   ticker: string
   transition: string
   duration: number
+  fillPlaylistId: string
+  liveSourceId: string
 }
+
+const AUTOMATION_OFF: AutomationStatus = { mode: 'off', text: 'Automation is off. PROGRAM is under manual control.', slotId: null, warning: null }
+// Automation sources: the fill playlist is keyed by playlist so changing it starts the new one.
+const fillSourceId = (playlistId: string) => `auto-fill-${playlistId}`
+const slotSourceId = (slotId: string) => `auto-slot-${slotId}`
 
 // The switcher setup is remembered in this browser; media itself can't be, so saved
 // sources come back offline and are reconnected (cameras automatically when allowed).
 function readSetup(): SavedSetup {
-  const fallback: SavedSetup = { sources: [], lowerTitle: 'LIVE FROM GGTV', lowerDetail: 'Broadcast control room', ticker: 'WELCOME TO GGTV LIVE', transition: 'CUT', duration: 350 }
+  const fallback: SavedSetup = {
+    sources: [], lowerTitle: 'LIVE FROM GGTV', lowerDetail: 'Broadcast control room', ticker: 'WELCOME TO GGTV LIVE',
+    transition: 'CUT', duration: 350, fillPlaylistId: '', liveSourceId: '',
+  }
   try {
     const stored = JSON.parse(localStorage.getItem(STORAGE_KEY) ?? 'null')
     return stored ? { ...fallback, ...stored, sources: Array.isArray(stored.sources) ? stored.sources : [] } : fallback
@@ -62,6 +72,11 @@ function SwitcherProvider({ children }: { children: ReactNode }) {
   const [playerStatus, setPlayerStatus] = useState<Record<string, { text: string; isError?: boolean }>>({})
   const [live, setLive] = useState<StudioLive | null>(null)
   const [liveBusy, setLiveBusy] = useState(false)
+  const [schedule, setSchedule] = useState<ScheduleEntry[]>([])
+  // Automation always starts off after a reload; the operator turns it on deliberately.
+  const [automation, setAutomationState] = useState<Automation>({ on: false, fillPlaylistId: initial.fillPlaylistId, liveSourceId: initial.liveSourceId })
+  const [automationStatus, setAutomationStatus] = useState<AutomationStatus>(AUTOMATION_OFF)
+  const automationTick = useRef<() => void>(() => undefined)
 
   const [programCanvas] = useState(createProgramCanvas)
   const canvasRef = useRef<HTMLCanvasElement | null>(programCanvas)
@@ -93,8 +108,12 @@ function SwitcherProvider({ children }: { children: ReactNode }) {
     // PROGRAM keeps drawing at full rate while the operator uses other tabs.
     const clockUrl = URL.createObjectURL(new Blob([`setInterval(() => postMessage(0), ${1000 / 30})`], { type: 'text/javascript' }))
     const clock = new Worker(clockUrl)
+    let ticks = 0
     clock.onmessage = () => {
       if (scene.current) drawProgram(context, scene.current, activeTransition.current, videos.current, performance.now())
+      // Schedule automation checks once a second on the same unthrottled clock.
+      ticks = (ticks + 1) % 30
+      if (ticks === 0) automationTick.current()
     }
     return () => {
       clock.terminate()
@@ -123,15 +142,24 @@ function SwitcherProvider({ children }: { children: ReactNode }) {
         ticker,
         transition,
         duration,
+        fillPlaylistId: automation.fillPlaylistId,
+        liveSourceId: automation.liveSourceId,
       }
       localStorage.setItem(STORAGE_KEY, JSON.stringify(setup))
     } catch {
       // Storage can be unavailable (private windows); the switcher still works without it.
     }
-  }, [sources, lowerTitle, lowerDetail, ticker, transition, duration])
+  }, [sources, lowerTitle, lowerDetail, ticker, transition, duration, automation.fillPlaylistId, automation.liveSourceId])
 
+  // Playlists and the schedule are edited on their own tabs; pick up changes regularly.
   useEffect(() => {
-    api<Playlist[]>('/studio/playlists').then(setPlaylists).catch(() => undefined)
+    const refresh = () => {
+      api<Playlist[]>('/studio/playlists').then(setPlaylists).catch(() => undefined)
+      api<ScheduleEntry[]>('/studio/schedule').then(setSchedule).catch(() => undefined)
+    }
+    refresh()
+    const timer = window.setInterval(refresh, 30000)
+    return () => window.clearInterval(timer)
   }, [])
 
   useEffect(() => {
@@ -285,15 +313,105 @@ function SwitcherProvider({ children }: { children: ReactNode }) {
     setProgramId((current) => current === source.id ? 'bars' : current)
   }, [release])
 
-  const takeProgram = useCallback(() => {
-    if (previewId === programId) return
+  const cutTo = useCallback((targetId: string, from: Source) => {
     activeTransition.current = transition === 'CUT' || duration === 0
       ? null
-      : { from: programSource, mode: transition, start: performance.now(), duration }
-    setProgramId(previewId)
+      : { from, mode: transition, start: performance.now(), duration }
+    setProgramId(targetId)
     setIsBlack(false)
+  }, [transition, duration])
+
+  const takeProgram = useCallback(() => {
+    if (previewId === programId) return
+    cutTo(previewId, programSource)
     setMessage(`${transition} to ${previewSource.name}.`)
-  }, [previewId, programId, transition, duration, programSource, previewSource])
+  }, [previewId, programId, programSource, previewSource, transition, cutTo])
+
+  // Adds an automation-owned playlist source (once) and returns its id.
+  const ensurePlaylistSource = useCallback((id: string, playlist: Playlist, label: string) => {
+    if (!players.current.has(id)) {
+      const element = startPlaylist(id, playlist)
+      setSources((current) => current.some((source) => source.id === id)
+        ? current
+        : [...current, { id, name: label, kind: 'media', element, auto: true }])
+    }
+    return id
+  }, [startPlaylist])
+
+  const dropAutoSource = useCallback((id: string) => {
+    release(id)
+    setSources((current) => current.filter((source) => source.id !== id))
+  }, [release])
+
+  // Runs once a second while automation is on: decides what PROGRAM should show right now.
+  useEffect(() => {
+    automationTick.current = () => {
+      if (!automation.on) return
+      const now = new Date().toISOString()
+      const slot = schedule.find((entry) => entry.start <= now && entry.end > now) ?? null
+      const next = schedule.find((entry) => entry.start > now) ?? null
+      const fill = playlists.find((playlist) => playlist.id === automation.fillPlaylistId) ?? null
+      let target: string | null = null
+      let mode: AutomationStatus['mode'] = 'idle'
+      let warning: string | null = null
+
+      if (slot?.kind === 'playlist') {
+        const playlist = playlists.find((item) => item.id === slot.playlistId)
+        if (playlist) {
+          target = ensurePlaylistSource(slotSourceId(slot.id), playlist, `SCHEDULED: ${slot.title.toUpperCase()}`)
+          mode = 'playlist'
+        } else warning = `"${slot.title}" uses a playlist that no longer exists.`
+      } else if (slot?.kind === 'live') {
+        const liveSource = sources.find((source) => source.id === automation.liveSourceId && !source.offline)
+        if (liveSource) {
+          target = liveSource.id
+          mode = 'live'
+        } else warning = `"${slot.title}" is a live show, but no live source is chosen or it is offline.`
+      }
+      if (!target && fill) {
+        target = ensurePlaylistSource(fillSourceId(fill.id), fill, `FILL: ${fill.name.toUpperCase()}`)
+        mode = 'fill'
+      }
+
+      // The fill playlist pauses while anything else is on and resumes where it stopped.
+      players.current.forEach((player, id) => {
+        if (!id.startsWith('auto-')) return
+        if (id === target) player.resume()
+        else player.pause()
+      })
+      if (target && target !== programId) {
+        cutTo(target, programSource)
+      }
+      // Clean up sources for finished slots and old fill playlists once they are off PROGRAM.
+      sources.forEach((source) => {
+        if (!source.auto || source.id === target || source.id === programId) return
+        const slotId = source.id.startsWith('auto-slot-') ? source.id.slice('auto-slot-'.length) : null
+        const ended = slotId ? !schedule.some((entry) => entry.id === slotId && entry.end > now) : true
+        if (ended) dropAutoSource(source.id)
+      })
+
+      const until = (iso: string) => new Date(iso).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+      const text = mode === 'playlist' ? `Scheduled: "${slot!.title}" until ${until(slot!.end)}`
+        : mode === 'live' ? `Live show: "${slot!.title}" until ${until(slot!.end)}`
+          : mode === 'fill' ? `Fill playlist "${fill!.name}"${next ? ` until "${next.title}" at ${until(next.start)}` : ''}`
+            : 'Nothing to play: choose a fill playlist or schedule something.'
+      setAutomationStatus((current) => current.text === text && current.warning === warning && current.slotId === (slot?.id ?? null)
+        ? current
+        : { mode, text, slotId: slot?.id ?? null, warning })
+    }
+  })
+
+  const setAutomation = useCallback((patch: Partial<Automation>) => {
+    setAutomationState((current) => ({ ...current, ...patch }))
+    if (patch.on === false) {
+      setAutomationStatus(AUTOMATION_OFF)
+      setMessage('Automation off. PROGRAM stays where it is; use TAKE to switch.')
+    } else if (patch.on) {
+      setMessage('Automation on. It switches PROGRAM to the schedule and the fill playlist.')
+      // Run straight away instead of waiting for the next one-second check.
+      window.setTimeout(() => automationTick.current(), 0)
+    }
+  }, [])
 
   const goLive = useCallback(async () => {
     if (!live) return
@@ -358,9 +476,13 @@ function SwitcherProvider({ children }: { children: ReactNode }) {
     liveBusy,
     goLive,
     endBroadcast,
+    schedule,
+    automation,
+    setAutomation,
+    automationStatus,
   }), [sources, previewSource, programSource, selectPreview, takeProgram, transition, duration, isBlack, lowerTitle, lowerDetail, ticker,
     lowerOnAir, tickerOnAir, message, addCapture, reconnectAll, removeSource, playlists, loadPlaylist, playerStatus, programCanvas, output,
-    live, liveBusy, goLive, endBroadcast])
+    live, liveBusy, goLive, endBroadcast, schedule, automation, setAutomation, automationStatus])
 
   return <SwitcherContext.Provider value={value}>{children}</SwitcherContext.Provider>
 }

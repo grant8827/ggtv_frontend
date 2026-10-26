@@ -5,6 +5,9 @@ import { getFile } from './mediaStore'
 export type PlaylistPlayer = {
   video: HTMLVideoElement
   skip: () => void
+  // Holds the current video where it is, so it can carry on from there later.
+  pause: () => void
+  resume: () => void
   destroy: () => void
 }
 
@@ -22,6 +25,7 @@ export function createPlaylistPlayer(playlist: Playlist, onStatus: (text: string
   let destroyed = false
   // Each attempt to play an item gets a number, so a failure is only handled once.
   let attempt = 0
+  let paused = false
 
   function fail(forAttempt: number, title: string, reason: string) {
     if (destroyed || forAttempt !== attempt) return
@@ -69,6 +73,10 @@ export function createPlaylistPlayer(playlist: Playlist, onStatus: (text: string
         throw new Error('no video')
       }
       if (destroyed || current !== attempt) return
+      if (paused) {
+        onStatus(`Paused at ${index + 1}/${items.length}: ${item.title}`)
+        return
+      }
       await video.play()
       if (current !== attempt) return
       failuresInRow = 0
@@ -90,6 +98,19 @@ export function createPlaylistPlayer(playlist: Playlist, onStatus: (text: string
   return {
     video,
     skip: () => void playNext(),
+    pause() {
+      if (paused) return
+      paused = true
+      video.pause()
+      const item = items[index]
+      if (item) onStatus(`Paused at ${index + 1}/${items.length}: ${item.title}`)
+    },
+    resume() {
+      if (!paused || destroyed) return
+      paused = false
+      const item = items[index]
+      video.play().then(() => item && onStatus(`Now playing ${index + 1}/${items.length}: ${item.title}`)).catch(() => undefined)
+    },
     destroy() {
       destroyed = true
       video.pause()
