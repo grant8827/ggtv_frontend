@@ -19,7 +19,7 @@ type SavedSetup = {
   liveSourceId: string
 }
 
-const AUTOMATION_OFF: AutomationStatus = { mode: 'off', text: 'Automation is off. PROGRAM is under manual control.', slotId: null, warning: null }
+const AUTOMATION_OFF: AutomationStatus = { mode: 'off', text: 'The schedule is off. PROGRAM is under manual control.', slotId: null, warning: null }
 // Automation sources: the fill playlist is keyed by playlist so changing it starts the new one.
 const fillSourceId = (playlistId: string) => `auto-fill-${playlistId}`
 const slotSourceId = (slotId: string) => `auto-slot-${slotId}`
@@ -453,9 +453,9 @@ function SwitcherProvider({ children }: { children: ReactNode }) {
     setAutomationState((current) => ({ ...current, ...patch }))
     if (patch.on === false) {
       setAutomationStatus(AUTOMATION_OFF)
-      setMessage('Automation off. PROGRAM stays where it is; use TAKE to switch.')
+      setMessage('Schedule off. PROGRAM stays where it is; use TAKE to switch.')
     } else if (patch.on) {
-      setMessage('Automation on. It switches PROGRAM to the schedule and the fill playlist.')
+      setMessage('Schedule on. It switches PROGRAM to scheduled shows, breaks and the fill playlist.')
       // Run straight away instead of waiting for the next one-second check.
       window.setTimeout(() => automationTick.current(), 0)
     }

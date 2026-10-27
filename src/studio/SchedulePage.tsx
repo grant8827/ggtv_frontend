@@ -274,7 +274,7 @@ function SchedulePage() {
         items: draft.kind === 'break' ? items : undefined,
       }
       await api(editingId ? `/studio/schedule/${editingId}` : '/studio/schedule', { method: editingId ? 'PUT' : 'POST', body })
-      setMessage(draft.kind === 'break' ? 'Break saved. Go live plays it when its time comes (automation on).' : editingId ? 'Slot updated.' : 'Slot added to the schedule.')
+      setMessage(draft.kind === 'break' ? 'Break saved. It plays when its time comes while the schedule is on in Go live.' : editingId ? 'Slot updated.' : 'Slot added to the schedule.')
       reset()
       await load()
     } catch (caught) {

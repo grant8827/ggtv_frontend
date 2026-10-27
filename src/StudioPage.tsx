@@ -125,14 +125,14 @@ function AutomationPanel() {
   return (
     <section className="control-panel automation-panel" aria-label="Schedule automation">
       <div className="control-panel-heading">
-        <h2><Bot size={14} /> Automation</h2>
+        <h2><Bot size={14} /> Schedule</h2>
         <button
           className={automation.on ? 'button button-danger automation-toggle' : 'button button-primary automation-toggle'}
           type="button"
           onClick={() => setAutomation({ on: !automation.on })}
           aria-pressed={automation.on}
         >
-          {automation.on ? 'TURN AUTOMATION OFF' : 'TURN AUTOMATION ON'}
+          {automation.on ? 'TURN SCHEDULE OFF' : 'TURN SCHEDULE ON'}
         </button>
       </div>
       <div className="automation-grid">
@@ -156,7 +156,7 @@ function AutomationPanel() {
           {automationStatus.warning && <p className="form-error">{automationStatus.warning}</p>}
           <p className="empty-note">
             Build playlists on <Link to="/studio/playlists">Playlists</Link> and set show times on <Link to="/studio/schedule">Schedule</Link>.
-            While automation is on it controls PROGRAM; start the output and go live as usual.
+            While the schedule is on it controls PROGRAM; start the output and go live as usual.
           </p>
         </div>
         <div>
