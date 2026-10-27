@@ -24,7 +24,7 @@ export function useSwitcherOutput(canvasRef: RefObject<HTMLCanvasElement | null>
   const audio = useRef<Audio | null>(null)
   const wakeLock = useRef<WakeLockSentinel | null>(null)
   const mic = useRef<{ stream: MediaStream; node: MediaStreamAudioSourceNode } | null>(null)
-  const mediaGains = useRef(new Map<string, { gain: GainNode; node: MediaElementAudioSourceNode }>())
+  const mediaGains = useRef(new Map<string, { gain: GainNode; node: AudioNode }>())
   const programId = useRef('')
 
   const ensureAudio = useCallback(() => {
@@ -43,17 +43,20 @@ export function useSwitcherOutput(canvasRef: RefObject<HTMLCanvasElement | null>
   }, [])
 
   // Each path that ends the output clears `socket` first, so the socket's own close event is ignored.
-  // Sources with sound (playlists) are heard only while they are on PROGRAM, in the output
-  // and on this computer's speakers so the operator hears what goes out.
-  const attachAudio = useCallback((id: string, element: HTMLVideoElement) => {
+  // Sources with sound (playlists, shared screens and tabs) are heard in the output only while
+  // they are on PROGRAM.
+  const attachAudio = useCallback((id: string, input: HTMLVideoElement | MediaStream) => {
     const { context, destination } = ensureAudio()
     void context.resume()
-    const node = context.createMediaElementSource(element)
+    const isStream = input instanceof MediaStream
+    const node = isStream ? context.createMediaStreamSource(input) : context.createMediaElementSource(input)
     const gain = context.createGain()
     gain.gain.value = id === programId.current ? 1 : 0
     node.connect(gain)
     gain.connect(destination)
-    gain.connect(context.destination)
+    // A playlist's sound now only comes out of this graph, so it also goes to this computer's
+    // speakers for the operator. A shared screen or tab is already playing on this computer.
+    if (!isStream) gain.connect(context.destination)
     mediaGains.current.set(id, { gain, node })
   }, [ensureAudio])
 

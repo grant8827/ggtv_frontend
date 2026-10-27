@@ -44,6 +44,16 @@ function kindOf(saved: SavedSource): Source['kind'] {
   return saved.kind === 'playlist' ? 'media' : saved.kind
 }
 
+// Screen captures include sound: a shared tab's, or the whole computer's where the browser offers
+// it. Processing meant for voices is turned off so music and video sound go out as they are.
+function captureScreen() {
+  return navigator.mediaDevices.getDisplayMedia({
+    video: true,
+    audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false },
+    systemAudio: 'include',
+  } as DisplayMediaStreamOptions)
+}
+
 function createProgramCanvas() {
   const canvas = document.createElement('canvas')
   canvas.width = OUTPUT_WIDTH
@@ -206,7 +216,8 @@ function SwitcherProvider({ children }: { children: ReactNode }) {
       : source))
   }, [release])
 
-  // Puts a captured stream on a source; the program canvas draws it from a muted video element.
+  // Puts a captured stream on a source; the program canvas draws it from a muted video element,
+  // and its sound (a shared tab or screen's) goes into the program mix.
   const attachStream = useCallback((id: string, stream: MediaStream) => {
     const video = document.createElement('video')
     video.muted = true
@@ -215,9 +226,10 @@ function SwitcherProvider({ children }: { children: ReactNode }) {
     void video.play().catch(() => undefined)
     videos.current.set(id, video)
     streams.current.set(id, stream)
+    if (stream.getAudioTracks().length) attachAudio(id, stream)
     // When the camera is unplugged or "Stop sharing" is clicked, show the source as offline.
     stream.getVideoTracks()[0]?.addEventListener('ended', () => goOffline(id))
-  }, [goOffline])
+  }, [attachAudio, goOffline])
 
   const startPlaylist = useCallback((id: string, playlist: Playlist, options?: { loop?: boolean; onFinished?: () => void }) => {
     const player = createPlaylistPlayer(playlist, (text, isError) => {
@@ -241,7 +253,7 @@ function SwitcherProvider({ children }: { children: ReactNode }) {
       } else {
         const stream = saved.kind === 'camera'
           ? await navigator.mediaDevices.getUserMedia({ video: { deviceId: { exact: saved.deviceId }, width: 1280, height: 720 }, audio: false })
-          : await navigator.mediaDevices.getDisplayMedia({ video: true, audio: false })
+          : await captureScreen()
         attachStream(source.id, stream)
         setSources((current) => current.map((item) => item.id === source.id ? { ...item, stream, offline: false } : item))
       }
@@ -281,7 +293,7 @@ function SwitcherProvider({ children }: { children: ReactNode }) {
     try {
       const stream = kind === 'camera'
         ? await navigator.mediaDevices.getUserMedia({ video: { width: 1280, height: 720 }, audio: false })
-        : await navigator.mediaDevices.getDisplayMedia({ video: true, audio: false })
+        : await captureScreen()
       const track = stream.getVideoTracks()[0]
       const id = `${kind}-${Date.now()}`
       const label = track?.label.replace(/\s*\([^)]*\)\s*$/, '').toUpperCase().slice(0, 28)
@@ -290,7 +302,9 @@ function SwitcherProvider({ children }: { children: ReactNode }) {
       attachStream(id, stream)
       setSources((current) => [...current, source])
       setPreviewId(id)
-      setMessage(`${source.name} added to preview.`)
+      setMessage(kind === 'screen' && !stream.getAudioTracks().length
+        ? `${source.name} added to preview without sound. To include sound, share again and turn on sharing audio in the browser's picker.`
+        : `${source.name} added to preview.`)
     } catch {
       setMessage(`${kind === 'camera' ? 'Camera' : 'Screen capture'} was cancelled or unavailable.`)
     }
