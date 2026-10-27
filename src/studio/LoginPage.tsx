@@ -1,6 +1,6 @@
 import { useState, type FormEvent } from 'react'
 import { Link, Navigate, useLocation, useNavigate } from 'react-router-dom'
-import { ArrowLeft, LockKeyhole, Radio } from 'lucide-react'
+import { ArrowLeft, LockKeyhole } from 'lucide-react'
 import { errorMessage } from '../api'
 import { useAuth } from '../auth'
 
@@ -33,8 +33,8 @@ function LoginPage() {
     <main className="login-page">
       <form className="login-card" onSubmit={submit}>
         <div className="brand login-brand">
-          <span className="brand-mark"><Radio size={18} strokeWidth={2.5} /></span>
-          <span>GG<span className="brand-accent">TV</span> <span className="login-brand-sub">STUDIO</span></span>
+          <img className="brand-logo" src="/logo.png" alt="GGTV" />
+          <span className="login-brand-sub">STUDIO</span>
         </div>
         <div>
           <h1>Studio sign in</h1>

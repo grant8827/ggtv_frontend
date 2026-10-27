@@ -1,6 +1,5 @@
 import { useEffect, useState } from 'react'
 import { Link, Navigate, Outlet, Route, Routes, useLocation } from 'react-router-dom'
-import { Radio } from 'lucide-react'
 import './App.css'
 import './GGTV.css'
 import './Dashboard.css'
@@ -28,8 +27,7 @@ function ViewerLayout() {
     <div className="app-shell">
       <header className="topbar">
         <Link to="/" className="brand" aria-label="GGTV home">
-          <span className="brand-mark"><Radio size={18} strokeWidth={2.5} /></span>
-          <span>GG<span className="brand-accent">TV</span></span>
+          <img className="brand-logo" src="/logo.png" alt="GGTV" />
         </Link>
 
         <div className="topbar-status">

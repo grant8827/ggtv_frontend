@@ -1,5 +1,5 @@
 import { NavLink, Outlet } from 'react-router-dom'
-import { CalendarClock, ExternalLink, LayoutDashboard, ListVideo, LogOut, MonitorPlay, Radio, RadioTower } from 'lucide-react'
+import { CalendarClock, ExternalLink, LayoutDashboard, ListVideo, LogOut, MonitorPlay, RadioTower } from 'lucide-react'
 import { useAuth } from '../auth'
 import { useSwitcher } from './switcherContext'
 
@@ -22,8 +22,8 @@ function StudioLayout() {
     <div className="dash-shell">
       <aside className="dash-sidebar">
         <div className="brand dash-brand">
-          <span className="brand-mark"><Radio size={18} strokeWidth={2.5} /></span>
-          <span>GG<span className="brand-accent">TV</span> <span className="dash-brand-sub">STUDIO</span></span>
+          <img className="brand-logo" src="/logo.png" alt="GGTV" />
+          <span className="dash-brand-sub">STUDIO</span>
         </div>
 
         <nav className="dash-nav" aria-label="Studio navigation">
