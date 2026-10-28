@@ -6,6 +6,7 @@ import './Dashboard.css'
 import AuthProvider from './AuthProvider'
 import { useAuth } from './auth'
 import WatchPage from './WatchPage'
+import PrivacyPage from './PrivacyPage'
 import StudioPage from './StudioPage'
 import LoginPage from './studio/LoginPage'
 import StudioLayout from './studio/StudioLayout'
@@ -68,6 +69,7 @@ function App() {
         </Route>
         <Route element={<ViewerLayout />}>
           <Route path="/" element={<WatchPage />} />
+          <Route path="/privacy" element={<PrivacyPage />} />
           <Route path="*" element={<WatchPage />} />
         </Route>
       </Routes>
