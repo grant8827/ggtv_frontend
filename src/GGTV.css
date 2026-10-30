@@ -34,8 +34,16 @@
 .player-corner .live-dot { width: 6px; height: 6px; }
 .player-state { position: absolute; inset: 0; display: grid; place-content: center; justify-items: center; gap: 10px; color: #d0d9d4; text-align: center; pointer-events: none; }
 .player-state svg { color: var(--signal); }
+.player-logo { display: block; width: min(220px, 38%); height: auto; margin-bottom: 6px; }
 .player-state strong { font: 700 12px/1 var(--mono); letter-spacing: .08em; }
 .player-state span { max-width: 280px; color: #88958f; font-size: 11px; overflow-wrap: anywhere; }
+/* Off air and no connection: the same screen as the apps, scaled to the player's width. */
+.player-frame { container-type: inline-size; }
+.player-slate { gap: 0; color: #f3f5f3; background: #000; }
+.player-slate .player-logo { width: 58cqw; margin-bottom: 5cqw; }
+.player-slate strong { font: 800 4.6cqw/1 system-ui, -apple-system, sans-serif; letter-spacing: .15em; }
+.player-slate p { margin: 2.2cqw 0 0; color: #93a29b; font: 400 3cqw/1.2 system-ui, -apple-system, sans-serif; }
+.player-slate.see-through { background: #0008; } /* connecting or buffering: the picture stays visible */
 .player-meta { display: flex; align-items: center; justify-content: space-between; gap: 18px; padding: 16px 2px 18px; border-bottom: 1px solid var(--line); }
 .player-meta h2 { margin: 7px 0 0; color: var(--ink); font: 700 21px/1.1 var(--display); }
 .player-meta p { margin: 5px 0 0; color: var(--muted); font-size: 11px; }

@@ -14,6 +14,7 @@ function WatchPage() {
   const [overrideUrl, setOverrideUrl] = useState<string | null>(null)
   const [draftUrl, setDraftUrl] = useState<string | null>(null)
   const [live, setLive] = useState<LiveStatus | null>(null)
+  const [offline, setOffline] = useState(false)
   const [schedule, setSchedule] = useState<ScheduleEntry[] | null>(null)
   const selectedChannel = channels.find((channel) => channel.id === selectedId) ?? channels[0]
   const isMainChannel = selectedChannel.id === channels[0].id
@@ -23,7 +24,9 @@ function WatchPage() {
 
   useEffect(() => {
     function refresh() {
-      api<LiveStatus>('/live').then(setLive).catch(() => setLive(null))
+      api<LiveStatus>('/live')
+        .then((status) => { setLive(status); setOffline(false) })
+        .catch(() => { setLive(null); setOffline(true) })
       api<ScheduleEntry[]>('/schedule').then(setSchedule).catch(() => setSchedule(null))
     }
     refresh()
@@ -34,6 +37,13 @@ function WatchPage() {
   const now = new Date().toISOString()
   const onNow = schedule?.find((entry) => entry.start <= now && entry.end > now)
   const mainSource = isMainChannel ? live?.source : undefined
+  // The main feed shows the same screens as the apps when there's nothing to play. A URL typed
+  // into the source settings is always played.
+  const slate = !isMainChannel || overrideUrl
+    ? undefined
+    : !live
+      ? offline ? { title: 'NO CONNECTION', detail: 'Check your internet connection.' } : { title: 'TUNING IN', detail: '' }
+      : live.source === 'off' ? { title: 'OFF AIR', detail: 'GGTV will be back soon.' } : undefined
   const heading = mainSource === 'live'
     ? live!.title
     : mainSource === 'playlist' ? live!.nowPlaying?.slotTitle ?? selectedChannel.name : selectedChannel.name
@@ -66,7 +76,7 @@ function WatchPage() {
 
       <div className="watch-layout">
         <section className="viewer-column" aria-label="Live channel player">
-          <HlsPlayer src={streamUrl} channelName={selectedChannel.name} />
+          <HlsPlayer src={slate ? '' : streamUrl} channelName={selectedChannel.name} slate={slate} viewer />
           <div className="player-meta">
             <div>
               <div className="channel-code"><CircleDot size={13} /> CHANNEL {selectedChannel.id} <span>/</span> {selectedChannel.detail}</div>

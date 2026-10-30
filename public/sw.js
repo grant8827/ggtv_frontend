@@ -1,9 +1,9 @@
 // GGTV service worker. It makes the site installable and shows an offline screen when a page
 // can't load. It deliberately caches nothing else: the channel is live, and the app's files
 // must always be fresh after a deploy.
-const OFFLINE_CACHE = 'ggtv-offline-v2'
+const OFFLINE_CACHE = 'ggtv-offline-v3'
 const OFFLINE_URL = '/offline.html'
-const OFFLINE_ICON = '/logo.png'
+const OFFLINE_ICON = '/logo-dark.png'
 
 self.addEventListener('install', (event) => {
   event.waitUntil(caches.open(OFFLINE_CACHE).then((cache) => cache.addAll([OFFLINE_URL, OFFLINE_ICON])))

@@ -5,11 +5,16 @@ import { Radio, Signal } from 'lucide-react'
 type HlsPlayerProps = {
   src: string
   channelName: string
+  // A full-screen message (logo, title, detail) shown instead of the video, as on the apps.
+  slate?: { title: string; detail: string }
+  // Viewers also get the app screens while connecting, and OFF AIR when the stream fails; the studio
+  // monitor keeps the technical status with the stream address.
+  viewer?: boolean
 }
 
 const RETRY_MS = 5000
 
-function HlsPlayer({ src, channelName }: HlsPlayerProps) {
+function HlsPlayer({ src, channelName, slate, viewer = false }: HlsPlayerProps) {
   const videoRef = useRef<HTMLVideoElement>(null)
   const [failedSrc, setFailedSrc] = useState('')
   const [playingSrc, setPlayingSrc] = useState('')
@@ -65,12 +70,16 @@ function HlsPlayer({ src, channelName }: HlsPlayerProps) {
     offline: 'SIGNAL UNAVAILABLE',
   }[status]
 
+  const screen = slate ?? (!viewer || status === 'playing'
+    ? undefined
+    : status === 'offline' ? { title: 'OFF AIR', detail: 'GGTV will be back soon.' } : { title: 'CONNECTING', detail: '' })
+
   return (
     <div className="player-frame">
       <video
         ref={videoRef}
         className="hls-video"
-        controls
+        controls={!screen}
         playsInline
         preload="metadata"
         // Live TV starts muted on its own (browsers allow that), including after a retry.
@@ -81,9 +90,16 @@ function HlsPlayer({ src, channelName }: HlsPlayerProps) {
         onWaiting={() => setPlayingSrc((current) => current === src ? '' : current)}
         onError={() => setFailedSrc(src)}
       />
-      <div className="player-corner"><span className="live-dot" /> GGTV / LIVE</div>
-      {status !== 'playing' && (
+      {!screen && <div className="player-corner"><span className="live-dot" /> GGTV / LIVE</div>}
+      {screen ? (
+        <div className={`player-state player-slate${screen === slate || status === 'offline' ? '' : ' see-through'}`}>
+          <img className="player-logo" src="/logo-dark.png" alt="GGTV" />
+          <strong>{screen.title}</strong>
+          {screen.detail && <p>{screen.detail}</p>}
+        </div>
+      ) : status !== 'playing' && (
         <div className="player-state">
+          <img className="player-logo" src="/logo-dark.png" alt="GGTV" />
           {status === 'offline' ? <Signal size={28} /> : <Radio size={28} />}
           <strong>{statusText}</strong>
           <span>{src || 'No HLS source is configured for this channel.'}</span>
