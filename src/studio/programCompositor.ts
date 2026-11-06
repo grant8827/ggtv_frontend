@@ -4,8 +4,13 @@ export const OUTPUT_HEIGHT = 720
 export type Source = {
   id: string
   name: string
-  kind: 'pattern' | 'camera' | 'screen' | 'media'
+  kind: 'pattern' | 'camera' | 'screen' | 'media' | 'guest' | 'layout' | 'image'
   stream?: MediaStream
+  // A still picture (image sources).
+  image?: HTMLImageElement
+  // The layout this source belongs to. It lives only inside that layout's screen, so it has no
+  // tile of its own in the input bank and is removed with the layout.
+  owner?: string
   // A video element the source plays into (loaded playlists).
   element?: HTMLVideoElement
   // What to reconnect after a reload; saved sources start offline until reconnected.
@@ -13,12 +18,45 @@ export type Source = {
   offline?: boolean
   // Added and removed by schedule automation rather than by the operator.
   auto?: boolean
+  // A layout shows other sources together; an empty slot waits for the next guest to join.
+  layout?: Layout
 }
+
+export type LayoutMode = 'split' | 'pip'
+
+export type Layout = {
+  mode: LayoutMode
+  // split: [left, right]. pip: [main, corner]. null is an empty screen waiting for a guest.
+  slots: [string | null, string | null]
+  // The corner screen's position and width, as fractions of the frame.
+  pip: { x: number; y: number; width: number }
+}
+
+export const DEFAULT_PIP = { x: 0.69, y: 0.05, width: 0.28 }
+
+// Where each slot of a layout is drawn, in output pixels.
+export function layoutRects(layout: Layout) {
+  if (layout.mode === 'split') {
+    const half = OUTPUT_WIDTH / 2
+    return [{ x: 0, y: 0, width: half, height: OUTPUT_HEIGHT }, { x: half, y: 0, width: half, height: OUTPUT_HEIGHT }]
+  }
+  const width = layout.pip.width * OUTPUT_WIDTH
+  const height = width * 9 / 16
+  return [
+    { x: 0, y: 0, width: OUTPUT_WIDTH, height: OUTPUT_HEIGHT },
+    { x: layout.pip.x * OUTPUT_WIDTH, y: layout.pip.y * OUTPUT_HEIGHT, width, height },
+  ]
+}
+
+type Rect = { x: number; y: number; width: number; height: number }
+export type Resolve = (id: string) => Source | undefined
 
 export type SavedSource =
   | { kind: 'camera'; deviceId: string }
   | { kind: 'screen' }
   | { kind: 'playlist'; playlistId: string }
+  | { kind: 'layout'; layout: Layout }
+  | { kind: 'image'; dataUrl: string }
 
 export type ProgramScene = {
   source: Source
@@ -53,33 +91,70 @@ function drawBars(ctx: CanvasRenderingContext2D) {
   })
 }
 
-function drawSlate(ctx: CanvasRenderingContext2D, label: string) {
+function drawSlate(ctx: CanvasRenderingContext2D, label: string, rect: Rect = FULL, text = 'NO SIGNAL') {
   ctx.fillStyle = '#17211d'
-  ctx.fillRect(0, 0, OUTPUT_WIDTH, OUTPUT_HEIGHT)
+  ctx.fillRect(rect.x, rect.y, rect.width, rect.height)
   ctx.fillStyle = '#88958f'
-  ctx.font = `600 28px ${MONO_FONT}`
+  const size = Math.max(14, Math.round(28 * Math.min(1, rect.width / OUTPUT_WIDTH * 1.6)))
+  ctx.font = `600 ${size}px ${MONO_FONT}`
   ctx.textAlign = 'center'
   ctx.textBaseline = 'middle'
-  ctx.fillText(`${label} · NO SIGNAL`, OUTPUT_WIDTH / 2, OUTPUT_HEIGHT / 2)
+  ctx.fillText(label ? `${label} · ${text}` : text, rect.x + rect.width / 2, rect.y + rect.height / 2, rect.width - 24)
   ctx.textAlign = 'left'
   ctx.textBaseline = 'alphabetic'
 }
 
-function drawSource(ctx: CanvasRenderingContext2D, source: Source, videos: Map<string, HTMLVideoElement>) {
-  ctx.fillStyle = '#080d0b'
-  ctx.fillRect(0, 0, OUTPUT_WIDTH, OUTPUT_HEIGHT)
+const FULL: Rect = { x: 0, y: 0, width: OUTPUT_WIDTH, height: OUTPUT_HEIGHT }
 
+// Draws a video into a rect: letterboxed when it fills the frame, cropped to fill a layout screen.
+function drawPicture(ctx: CanvasRenderingContext2D, picture: CanvasImageSource, pictureWidth: number, pictureHeight: number, rect: Rect, cover: boolean) {
+  const fit = cover ? Math.max : Math.min
+  const scale = fit(rect.width / pictureWidth, rect.height / pictureHeight)
+  const width = pictureWidth * scale
+  const height = pictureHeight * scale
+  ctx.save()
+  ctx.beginPath()
+  ctx.rect(rect.x, rect.y, rect.width, rect.height)
+  ctx.clip()
+  ctx.drawImage(picture, rect.x + (rect.width - width) / 2, rect.y + (rect.height - height) / 2, width, height)
+  ctx.restore()
+}
+
+function drawInto(ctx: CanvasRenderingContext2D, source: Source, rect: Rect, cover: boolean, videos: Map<string, HTMLVideoElement>) {
+  ctx.fillStyle = '#080d0b'
+  ctx.fillRect(rect.x, rect.y, rect.width, rect.height)
   const video = videos.get(source.id)
-  if (video && video.readyState >= 2 && video.videoWidth) {
-    // Letterbox the source into the 16:9 frame.
-    const scale = Math.min(OUTPUT_WIDTH / video.videoWidth, OUTPUT_HEIGHT / video.videoHeight)
-    const width = video.videoWidth * scale
-    const height = video.videoHeight * scale
-    ctx.drawImage(video, (OUTPUT_WIDTH - width) / 2, (OUTPUT_HEIGHT - height) / 2, width, height)
-    return
+  const image = source.image
+  if (video && video.readyState >= 2 && video.videoWidth) drawPicture(ctx, video, video.videoWidth, video.videoHeight, rect, cover)
+  // Pictures (logos, slides) always show whole; video is cropped to fill a layout screen.
+  else if (image?.complete && image.naturalWidth) drawPicture(ctx, image, image.naturalWidth, image.naturalHeight, rect, false)
+  else if (source.kind === 'pattern' && rect === FULL) drawBars(ctx)
+  else drawSlate(ctx, source.name, rect)
+}
+
+function drawLayout(ctx: CanvasRenderingContext2D, layout: Layout, videos: Map<string, HTMLVideoElement>, resolve: Resolve) {
+  const rects = layoutRects(layout)
+  layout.slots.forEach((id, index) => {
+    const rect = rects[index]
+    const slotSource = id ? resolve(id) : undefined
+    if (slotSource && slotSource.kind !== 'layout') drawInto(ctx, slotSource, rect, layout.mode === 'split' || index === 1, videos)
+    else drawSlate(ctx, '', rect, id ? 'SOURCE REMOVED' : 'WAITING FOR GUEST')
+    if (layout.mode === 'pip' && index === 1) {
+      ctx.strokeStyle = 'rgba(255, 255, 255, 0.9)'
+      ctx.lineWidth = 3
+      ctx.strokeRect(rect.x + 1.5, rect.y + 1.5, rect.width - 3, rect.height - 3)
+    }
+  })
+  if (layout.mode === 'split') {
+    ctx.fillStyle = '#080d0b'
+    ctx.fillRect(OUTPUT_WIDTH / 2 - 2, 0, 4, OUTPUT_HEIGHT)
   }
-  if (source.kind === 'pattern') drawBars(ctx)
-  else drawSlate(ctx, source.name)
+}
+
+// Draws one source filling the whole frame (a layout draws the sources it holds).
+export function drawSource(ctx: CanvasRenderingContext2D, source: Source, videos: Map<string, HTMLVideoElement>, resolve: Resolve) {
+  if (source.layout) drawLayout(ctx, source.layout, videos, resolve)
+  else drawInto(ctx, source, FULL, false, videos)
 }
 
 function drawLowerThird(ctx: CanvasRenderingContext2D, title: string, detail: string) {
@@ -127,32 +202,33 @@ export function drawProgram(
   transition: Transition | null,
   videos: Map<string, HTMLVideoElement>,
   now: number,
+  resolve: Resolve,
 ) {
   const progress = transition ? Math.min(1, (now - transition.start) / transition.duration) : 1
 
   if (transition && progress < 1) {
     if (transition.mode === 'WIPE') {
-      drawSource(ctx, transition.from, videos)
+      drawSource(ctx, transition.from, videos, resolve)
       ctx.save()
       ctx.beginPath()
       ctx.rect(0, 0, OUTPUT_WIDTH * progress, OUTPUT_HEIGHT)
       ctx.clip()
-      drawSource(ctx, scene.source, videos)
+      drawSource(ctx, scene.source, videos, resolve)
       ctx.restore()
     } else if (transition.mode === 'FADE') {
       // Dip through black: old source fades out, new source fades in.
       const outgoing = progress < 0.5
-      drawSource(ctx, outgoing ? transition.from : scene.source, videos)
+      drawSource(ctx, outgoing ? transition.from : scene.source, videos, resolve)
       ctx.fillStyle = `rgba(0, 0, 0, ${outgoing ? progress * 2 : (1 - progress) * 2})`
       ctx.fillRect(0, 0, OUTPUT_WIDTH, OUTPUT_HEIGHT)
     } else {
-      drawSource(ctx, transition.from, videos)
+      drawSource(ctx, transition.from, videos, resolve)
       ctx.globalAlpha = progress
-      drawSource(ctx, scene.source, videos)
+      drawSource(ctx, scene.source, videos, resolve)
       ctx.globalAlpha = 1
     }
   } else {
-    drawSource(ctx, scene.source, videos)
+    drawSource(ctx, scene.source, videos, resolve)
   }
 
   if (scene.lowerThird) drawLowerThird(ctx, scene.lowerThird.title, scene.lowerThird.detail)

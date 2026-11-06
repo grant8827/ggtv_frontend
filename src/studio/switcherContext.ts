@@ -1,6 +1,7 @@
 import { createContext, useContext } from 'react'
 import type { Playlist, ScheduleEntry, StudioLive } from '../api'
-import type { Source } from './programCompositor'
+import type { Layout, LayoutMode, Source } from './programCompositor'
+import type { GuestInfo } from './guestLink'
 import type { useSwitcherOutput } from './useSwitcherOutput'
 
 export type Switcher = {
@@ -37,6 +38,15 @@ export type Switcher = {
   programCanvas: HTMLCanvasElement
   output: ReturnType<typeof useSwitcherOutput>
   live: StudioLive | null
+  setLive: (live: StudioLive) => void
+  addCamera: (deviceId: string, mode: 'full' | LayoutMode) => Promise<void>
+  updateLayout: (id: string, patch: Partial<Layout>) => void
+  setLayoutSlot: (layoutId: string, slot: 0 | 1, choice: SlotChoice) => Promise<void>
+  // Draws a source (a layout included) into a 1280×720 canvas context, for previews.
+  drawSourceFrame: (context: CanvasRenderingContext2D, source: Source) => void
+  guests: GuestInfo[]
+  guestLinkOpen: boolean
+  removeGuest: (guestId: string) => void
   liveBusy: boolean
   goLive: () => Promise<void>
   endBroadcast: () => Promise<void>
@@ -45,6 +55,14 @@ export type Switcher = {
   setAutomation: (patch: Partial<Automation>) => void
   automationStatus: AutomationStatus
 }
+
+// What a layout screen can be changed to (right-click on a screen).
+export type SlotChoice =
+  | { kind: 'camera'; deviceId: string }
+  | { kind: 'screen' }
+  | { kind: 'image'; file: File }
+  | { kind: 'source'; id: string }
+  | { kind: 'empty' }
 
 export type Automation = {
   on: boolean

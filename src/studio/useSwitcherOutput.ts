@@ -11,7 +11,20 @@ function pickMimeType() {
   return MIME_TYPES.find((type) => MediaRecorder.isTypeSupported(type)) ?? null
 }
 
-type Audio = { context: AudioContext; destination: MediaStreamAudioDestinationNode }
+// `destination` is the program mix. `talkback` is what invited guests hear: the studio mic only,
+// so they never hear their own voice coming back.
+type Audio = { context: AudioContext; destination: MediaStreamAudioDestinationNode; talkback: MediaStreamAudioDestinationNode }
+
+// The microphone input chosen in the mic settings, remembered per browser. Empty means the default input.
+const MIC_DEVICE_KEY = 'ggtv.micDeviceId'
+
+function savedMicDevice() {
+  try {
+    return localStorage.getItem(MIC_DEVICE_KEY) ?? ''
+  } catch {
+    return ''
+  }
+}
 
 // Records the program canvas (plus optional microphone) and streams it to the backend,
 // which publishes it to SRS as the live encoder.
@@ -19,13 +32,15 @@ export function useSwitcherOutput(canvasRef: RefObject<HTMLCanvasElement | null>
   const [state, setState] = useState<OutputState>('idle')
   const [message, setMessage] = useState('')
   const [micOn, setMicOn] = useState(false)
+  const [micDeviceId, setMicDeviceId] = useState(savedMicDevice)
+  const micDeviceRef = useRef(micDeviceId)
   const socket = useRef<WebSocket | null>(null)
   const recorder = useRef<MediaRecorder | null>(null)
   const audio = useRef<Audio | null>(null)
   const wakeLock = useRef<WakeLockSentinel | null>(null)
   const mic = useRef<{ stream: MediaStream; node: MediaStreamAudioSourceNode } | null>(null)
   const mediaGains = useRef(new Map<string, { gain: GainNode; node: AudioNode }>())
-  const programId = useRef('')
+  const programIds = useRef(new Set<string>())
 
   const ensureAudio = useCallback(() => {
     if (!audio.current) {
@@ -37,26 +52,30 @@ export function useSwitcherOutput(canvasRef: RefObject<HTMLCanvasElement | null>
       silence.offset.value = 0
       silence.connect(destination)
       silence.start()
-      audio.current = { context, destination }
+      const talkback = context.createMediaStreamDestination()
+      silence.connect(talkback)
+      audio.current = { context, destination, talkback }
     }
     return audio.current
   }, [])
 
   // Each path that ends the output clears `socket` first, so the socket's own close event is ignored.
-  // Sources with sound (playlists, shared screens and tabs) are heard in the output only while
-  // they are on PROGRAM.
-  const attachAudio = useCallback((id: string, input: HTMLVideoElement | MediaStream) => {
+  // Sources with sound (playlists, shared screens and tabs, guests) are heard in the output only
+  // while they are on PROGRAM, alone or in a layout.
+  const attachAudio = useCallback((id: string, input: HTMLVideoElement | MediaStream, options: { monitor?: boolean } = {}) => {
     const { context, destination } = ensureAudio()
     void context.resume()
     const isStream = input instanceof MediaStream
     const node = isStream ? context.createMediaStreamSource(input) : context.createMediaElementSource(input)
     const gain = context.createGain()
-    gain.gain.value = id === programId.current ? 1 : 0
+    gain.gain.value = programIds.current.has(id) ? 1 : 0
     node.connect(gain)
     gain.connect(destination)
     // A playlist's sound now only comes out of this graph, so it also goes to this computer's
     // speakers for the operator. A shared screen or tab is already playing on this computer.
     if (!isStream) gain.connect(context.destination)
+    // Guests are always heard here, on or off PROGRAM, so the operator can talk to them before air.
+    if (options.monitor) node.connect(context.destination)
     mediaGains.current.set(id, { gain, node })
   }, [ensureAudio])
 
@@ -67,13 +86,20 @@ export function useSwitcherOutput(canvasRef: RefObject<HTMLCanvasElement | null>
     mediaGains.current.delete(id)
   }, [])
 
-  const setProgramAudio = useCallback((id: string) => {
-    programId.current = id
+  const setProgramAudio = useCallback((ids: string[]) => {
+    programIds.current = new Set(ids)
     const context = audio.current?.context
     mediaGains.current.forEach(({ gain }, sourceId) => {
-      if (context) gain.gain.setTargetAtTime(sourceId === id ? 1 : 0, context.currentTime, 0.08)
+      if (context) gain.gain.setTargetAtTime(programIds.current.has(sourceId) ? 1 : 0, context.currentTime, 0.08)
     })
   }, [])
+
+  // The audio track sent back to guests (the studio mic when it is on, otherwise silence).
+  const talkbackTrack = useCallback(() => {
+    const { context, talkback } = ensureAudio()
+    void context.resume()
+    return talkback.stream.getAudioTracks()[0]
+  }, [ensureAudio])
 
   // Keeps the screen (and so the computer) awake while sending. Browsers drop the lock when the
   // tab is hidden, so it is taken again whenever the tab comes back.
@@ -167,25 +193,60 @@ export function useSwitcherOutput(canvasRef: RefObject<HTMLCanvasElement | null>
     }
   }, [canvasRef, ensureAudio, fail])
 
-  const toggleMic = useCallback(async () => {
-    if (mic.current) {
-      mic.current.node.disconnect()
-      mic.current.stream.getTracks().forEach((track) => track.stop())
-      mic.current = null
-      setMicOn(false)
-      return
-    }
+  const turnMicOff = useCallback(() => {
+    if (!mic.current) return
+    mic.current.node.disconnect()
+    mic.current.stream.getTracks().forEach((track) => track.stop())
+    mic.current = null
+    setMicOn(false)
+  }, [])
+
+  const turnMicOn = useCallback(async () => {
+    if (mic.current) return
+    const audioOptions = { echoCancellation: true, noiseSuppression: true }
+    const deviceId = micDeviceRef.current
+    let stream: MediaStream
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true } })
-      const { context, destination } = ensureAudio()
-      const node = context.createMediaStreamSource(stream)
-      node.connect(destination)
-      mic.current = { stream, node }
-      setMicOn(true)
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({ audio: deviceId ? { ...audioOptions, deviceId: { exact: deviceId } } : audioOptions })
+      } catch (error) {
+        // The chosen input was unplugged: fall back to the computer's default microphone.
+        if (!deviceId || (error as DOMException).name !== 'OverconstrainedError') throw error
+        stream = await navigator.mediaDevices.getUserMedia({ audio: audioOptions })
+        setMessage('The selected microphone was not found, so the default microphone is on.')
+      }
     } catch {
       setMessage('Microphone access was blocked or unavailable.')
+      return
     }
-  }, [ensureAudio])
+    const { context, destination } = ensureAudio()
+    void context.resume()
+    const node = context.createMediaStreamSource(stream)
+    node.connect(destination)
+    node.connect(audio.current!.talkback)
+    mic.current = { stream, node }
+    stream.getAudioTracks()[0]?.addEventListener('ended', () => {
+      if (mic.current?.stream !== stream) return
+      turnMicOff()
+      setMessage('The microphone was disconnected.')
+    })
+    setMicOn(true)
+  }, [ensureAudio, turnMicOff])
+
+  // Picks which microphone input to use; switches over straight away if the mic is on.
+  const chooseMic = useCallback(async (deviceId: string) => {
+    micDeviceRef.current = deviceId
+    setMicDeviceId(deviceId)
+    try {
+      localStorage.setItem(MIC_DEVICE_KEY, deviceId)
+    } catch {
+      // Storage can be unavailable (private windows); the choice still holds for this visit.
+    }
+    if (mic.current) {
+      turnMicOff()
+      await turnMicOn()
+    }
+  }, [turnMicOff, turnMicOn])
 
   useEffect(() => () => {
     if (recorder.current?.state === 'recording') recorder.current.stop()
@@ -196,5 +257,5 @@ export function useSwitcherOutput(canvasRef: RefObject<HTMLCanvasElement | null>
     void audio.current?.context.close()
   }, [])
 
-  return { state, message, micOn, start, stop, toggleMic, attachAudio, detachAudio, setProgramAudio }
+  return { state, message, micOn, micDeviceId, start, stop, turnMicOn, turnMicOff, chooseMic, attachAudio, detachAudio, setProgramAudio, talkbackTrack }
 }

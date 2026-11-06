@@ -15,6 +15,8 @@ import OverviewPage from './studio/OverviewPage'
 import PreviewPage from './studio/PreviewPage'
 import SchedulePage from './studio/SchedulePage'
 import PlaylistsPage from './studio/PlaylistsPage'
+import GuestsPage from './studio/GuestsPage'
+import GuestPage from './GuestPage'
 
 function ViewerLayout() {
   const [clock, setClock] = useState(() => new Date())
@@ -58,6 +60,7 @@ function App() {
     <AuthProvider>
       <Routes>
         <Route path="/studio/login" element={<LoginPage />} />
+        <Route path="/guest/:token" element={<GuestPage />} />
         <Route path="/studio" element={<RequireStudioLogin />}>
           <Route index element={<OverviewPage />} />
           <Route path="live" element={<StudioPage />} />
@@ -65,6 +68,7 @@ function App() {
           <Route path="switcher" element={<Navigate to="/studio/live" replace />} />
           <Route path="schedule" element={<SchedulePage />} />
           <Route path="playlists" element={<PlaylistsPage />} />
+          <Route path="guests" element={<GuestsPage />} />
           <Route path="*" element={<Navigate to="/studio" replace />} />
         </Route>
         <Route element={<ViewerLayout />}>

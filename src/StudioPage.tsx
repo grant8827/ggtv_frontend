@@ -5,9 +5,10 @@ import {
   Bot,
   Camera,
   Captions,
+  Columns2,
+  PictureInPicture2,
+  UserRound,
   ListVideo,
-  Mic,
-  MicOff,
   MonitorUp,
   Radio,
   RadioTower,
@@ -22,6 +23,8 @@ import {
 import { describeEntry, formatDay, formatTime } from './api'
 import { OUTPUT_HEIGHT, OUTPUT_WIDTH, type Source } from './studio/programCompositor'
 import { useSwitcher } from './studio/switcherContext'
+import { MicControl, RestreamControl } from './studio/OutputControls'
+import { AddCameraControl, LayoutCanvas, LayoutOverlay } from './studio/LayoutControls'
 
 const OUTPUT_LABELS = { idle: 'OUTPUT OFF', connecting: 'CONNECTING', streaming: 'SENDING TO ORIGIN', error: 'OUTPUT ERROR' }
 
@@ -60,7 +63,9 @@ function PreviewMonitor({ source }: { source: Source }) {
     <section className="monitor-panel preview">
       <div className="monitor-header"><span>PREVIEW</span><small>PVW 01</small></div>
       <div className="monitor-screen">
-        {source.element ? (
+        {source.layout ? (
+          <LayoutCanvas source={source} />
+        ) : source.element ? (
           <canvas ref={canvasRef} width={640} height={360} aria-label={`${source.name} source`} />
         ) : source.stream ? (
           <video ref={videoRef} autoPlay muted playsInline aria-label={`${source.name} source`} />
@@ -70,6 +75,7 @@ function PreviewMonitor({ source }: { source: Source }) {
           <div className={`test-pattern ${source.kind}`} />
         )}
         <span className="screen-caption">{source.name}</span>
+        {source.layout && <LayoutOverlay source={source} />}
       </div>
       <p className="monitor-source">SOURCE: {source.name}</p>
     </section>
@@ -93,7 +99,10 @@ function ProgramMonitor() {
   return (
     <section className="monitor-panel program">
       <div className="monitor-header"><span>PROGRAM</span><small>PGM 01 · {OUTPUT_WIDTH}×{OUTPUT_HEIGHT}</small></div>
-      <div className="monitor-screen" ref={slot} />
+      <div className="monitor-screen">
+        <div className="program-canvas-slot" ref={slot} />
+        {programSource.layout && <LayoutOverlay source={programSource} />}
+      </div>
       <p className="monitor-source">SOURCE: {programSource.name}{isBlack ? ' · BLACK' : ''}</p>
     </section>
   )
@@ -120,7 +129,7 @@ function AutomationPanel() {
   const nowIso = new Date(now).toISOString()
   const upcoming = schedule.filter((entry) => entry.end > nowIso).slice(0, 6)
   const next = upcoming.find((entry) => entry.start > nowIso)
-  const liveInputs = sources.filter((source) => source.kind === 'camera' || source.kind === 'screen')
+  const liveInputs = sources.filter((source) => !source.owner && (source.kind === 'camera' || source.kind === 'screen' || source.kind === 'layout'))
 
   return (
     <section className="control-panel automation-panel" aria-label="Schedule automation">
@@ -192,6 +201,8 @@ function StudioPage() {
   const [playlistId, setPlaylistId] = useState('')
   const loadedPlaylists = sources.filter((source) => source.saved?.kind === 'playlist' && !source.offline)
   const offlineCount = sources.filter((source) => source.offline).length
+  // Cameras, screens and pictures that belong to a layout only show inside that layout.
+  const bankSources = sources.filter((source) => !source.owner)
   const sending = output.state === 'streaming'
 
   return (
@@ -215,9 +226,9 @@ function StudioPage() {
           </p>
         </div>
         <div className="output-actions">
-          <button className={output.micOn ? 'capture-button active' : 'capture-button'} type="button" onClick={() => void output.toggleMic()} aria-pressed={output.micOn}>
-            {output.micOn ? <Mic size={14} /> : <MicOff size={14} />} {output.micOn ? 'MIC ON' : 'MIC OFF'}
-          </button>
+          <MicControl />
+          <RestreamControl platform="youtube" />
+          <RestreamControl platform="facebook" />
           {sending || output.state === 'connecting' ? (
             <button className="button button-muted" type="button" onClick={output.stop}><Square size={13} /> STOP OUTPUT</button>
           ) : (
@@ -262,9 +273,9 @@ function StudioPage() {
 
       <div className="studio-lower-grid">
         <section className="control-panel">
-          <div className="control-panel-heading"><h2>Input bank</h2><span>{sources.length.toString().padStart(2, '0')} SOURCES · SAVED IN THIS BROWSER</span></div>
+          <div className="control-panel-heading"><h2>Input bank</h2><span>{bankSources.length.toString().padStart(2, '0')} SOURCES · SAVED IN THIS BROWSER</span></div>
           <div className="input-bank">
-            {sources.map((source, index) => (
+            {bankSources.map((source, index) => (
               <div key={source.id} className="input-tile-wrap">
                 <button
                   className={[
@@ -279,7 +290,7 @@ function StudioPage() {
                   title={source.offline ? 'Click to reconnect' : undefined}
                 >
                   <span className={`input-art ${source.kind}`}>
-                    {source.offline ? <RefreshCw size={18} /> : source.kind === 'camera' ? <Camera size={20} /> : source.kind === 'screen' ? <MonitorUp size={20} /> : source.kind === 'media' ? <Video size={20} /> : <Signal size={20} />}
+                    {source.offline ? <RefreshCw size={18} /> : source.kind === 'guest' ? <UserRound size={20} /> : source.layout ? (source.layout.mode === 'split' ? <Columns2 size={20} /> : <PictureInPicture2 size={20} />) : source.kind === 'camera' ? <Camera size={20} /> : source.kind === 'screen' ? <MonitorUp size={20} /> : source.kind === 'media' ? <Video size={20} /> : <Signal size={20} />}
                   </span>
                   <span className="input-label">{String(index + 1).padStart(2, '0')} · {source.name}{source.offline ? ' · RECONNECT' : ''}</span>
                 </button>
@@ -290,7 +301,7 @@ function StudioPage() {
             ))}
           </div>
           <div className="capture-actions">
-            <button className="capture-button" type="button" onClick={() => void switcher.addCapture('camera')}><Camera size={14} /> ADD CAMERA</button>
+            <AddCameraControl />
             <button className="capture-button" type="button" onClick={() => void switcher.addCapture('screen')}><ScreenShare size={14} /> SHARE SCREEN</button>
             {offlineCount > 0 && (
               <button className="capture-button primary" type="button" onClick={() => void switcher.reconnectAll()}><RefreshCw size={14} /> RECONNECT {offlineCount} SAVED</button>

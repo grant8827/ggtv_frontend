@@ -1,15 +1,16 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { api, errorMessage, type Playlist, type ScheduleEntry, type StudioLive } from '../api'
 import { createPlaylistPlayer, type PlaylistPlayer } from './playlistPlayer'
-import { drawProgram, OUTPUT_HEIGHT, OUTPUT_WIDTH, type ProgramScene, type SavedSource, type Source, type Transition } from './programCompositor'
-import { SwitcherContext, type Automation, type AutomationStatus, type Switcher } from './switcherContext'
+import { DEFAULT_PIP, drawProgram, drawSource, OUTPUT_HEIGHT, OUTPUT_WIDTH, type Layout, type LayoutMode, type ProgramScene, type SavedSource, type Source, type Transition } from './programCompositor'
+import { useGuestLink, type GuestInfo } from './guestLink'
+import { SwitcherContext, type Automation, type AutomationStatus, type SlotChoice, type Switcher } from './switcherContext'
 import { useSwitcherOutput } from './useSwitcherOutput'
 
 const STORAGE_KEY = 'ggtv-switcher-v1'
 const BARS: Source = { id: 'bars', name: 'COLOR BARS', kind: 'pattern' }
 
 type SavedSetup = {
-  sources: { id: string; name: string; saved: SavedSource }[]
+  sources: { id: string; name: string; saved: SavedSource; owner?: string }[]
   lowerTitle: string
   lowerDetail: string
   ticker: string
@@ -44,6 +45,51 @@ function kindOf(saved: SavedSource): Source['kind'] {
   return saved.kind === 'playlist' ? 'media' : saved.kind
 }
 
+function imageFrom(dataUrl: string) {
+  const image = new Image()
+  image.src = dataUrl
+  return image
+}
+
+// Shrinks a chosen picture to at most 1280×720 so it can be saved with the switcher setup.
+async function readImage(file: File) {
+  if (!file.type.startsWith('image/')) throw new Error('That file is not an image.')
+  const bitmap = await createImageBitmap(file)
+  const scale = Math.min(1, OUTPUT_WIDTH / bitmap.width, OUTPUT_HEIGHT / bitmap.height)
+  const canvas = document.createElement('canvas')
+  canvas.width = Math.round(bitmap.width * scale)
+  canvas.height = Math.round(bitmap.height * scale)
+  canvas.getContext('2d')?.drawImage(bitmap, 0, 0, canvas.width, canvas.height)
+  bitmap.close()
+  return canvas.toDataURL('image/webp', 0.88)
+}
+
+const guestSourceId = (guestId: string) => `guest-${guestId}`
+const isGuestSource = (id: string | null) => Boolean(id?.startsWith('guest-'))
+
+// Guests are gone after a reload, so a saved layout keeps their screens empty for the next guest.
+function savedLayout(layout: Layout): SavedSource {
+  return { kind: 'layout', layout: { ...layout, slots: layout.slots.map((id) => isGuestSource(id) ? null : id) as Layout['slots'] } }
+}
+
+// Puts a guest into the first empty layout screen: the layout on PROGRAM first, then PREVIEW, then any other.
+function placeGuest(sources: Source[], guestId: string, preferred: string[]) {
+  if (sources.some((source) => source.layout?.slots.includes(guestId))) return sources
+  const layouts = sources.filter((source) => source.layout?.slots.includes(null))
+  const target = preferred.map((id) => layouts.find((source) => source.id === id)).find(Boolean) ?? layouts[0]
+  if (!target?.layout) return sources
+  const slots = [...target.layout.slots] as Layout['slots']
+  slots[slots.indexOf(null)] = guestId
+  return sources.map((source) => source === target ? { ...source, layout: { ...target.layout!, slots } } : source)
+}
+
+// Clears a removed source out of every layout, leaving its screen empty for the next guest.
+function clearFromLayouts(sources: Source[], id: string) {
+  return sources.map((source) => source.layout?.slots.includes(id)
+    ? { ...source, layout: { ...source.layout, slots: source.layout.slots.map((slot) => slot === id ? null : slot) as Layout['slots'] } }
+    : source)
+}
+
 // Screen captures include sound: a shared tab's, or the whole computer's where the browser offers
 // it. Processing meant for voices is turned off so music and video sound go out as they are.
 function captureScreen() {
@@ -66,7 +112,11 @@ function SwitcherProvider({ children }: { children: ReactNode }) {
   const [initial] = useState(readSetup)
   const [sources, setSources] = useState<Source[]>(() => [
     BARS,
-    ...initial.sources.map(({ id, name, saved }) => ({ id, name, kind: kindOf(saved), saved, offline: true })),
+    ...initial.sources.map(({ id, name, saved, owner }): Source => saved.kind === 'layout'
+      ? { id, name, kind: 'layout', layout: { ...saved.layout, pip: { ...DEFAULT_PIP, ...saved.layout.pip } } }
+      : saved.kind === 'image'
+        ? { id, name, kind: 'image', image: imageFrom(saved.dataUrl), saved, owner }
+        : { id, name, kind: kindOf(saved), saved, offline: true, owner }),
   ])
   const [previewId, setPreviewId] = useState('bars')
   const [programId, setProgramId] = useState('bars')
@@ -94,7 +144,7 @@ function SwitcherProvider({ children }: { children: ReactNode }) {
   const [programCanvas] = useState(createProgramCanvas)
   const canvasRef = useRef<HTMLCanvasElement | null>(programCanvas)
   const output = useSwitcherOutput(canvasRef)
-  const { attachAudio, detachAudio, setProgramAudio } = output
+  const { attachAudio, detachAudio, setProgramAudio, talkbackTrack } = output
   const streams = useRef(new Map<string, MediaStream>())
   const videos = useRef(new Map<string, HTMLVideoElement>())
   const players = useRef(new Map<string, PlaylistPlayer>())
@@ -103,6 +153,12 @@ function SwitcherProvider({ children }: { children: ReactNode }) {
 
   const previewSource = sources.find((source) => source.id === previewId) ?? BARS
   const programSource = sources.find((source) => source.id === programId) ?? BARS
+  // Read by the frame clock and by callbacks that run outside React updates.
+  const latest = useRef({ sources, previewId, programId })
+  useEffect(() => {
+    latest.current = { sources, previewId, programId }
+  })
+  const resolve = useCallback((id: string) => latest.current.sources.find((source) => source.id === id), [])
 
   useEffect(() => {
     scene.current = {
@@ -123,7 +179,7 @@ function SwitcherProvider({ children }: { children: ReactNode }) {
     const clock = new Worker(clockUrl)
     let ticks = 0
     clock.onmessage = () => {
-      if (scene.current) drawProgram(context, scene.current, activeTransition.current, videos.current, performance.now())
+      if (scene.current) drawProgram(context, scene.current, activeTransition.current, videos.current, performance.now(), resolve)
       // Schedule automation checks once a second on the same unthrottled clock.
       ticks = (ticks + 1) % 30
       if (ticks === 0) automationTick.current()
@@ -132,7 +188,7 @@ function SwitcherProvider({ children }: { children: ReactNode }) {
       clock.terminate()
       URL.revokeObjectURL(clockUrl)
     }
-  }, [programCanvas])
+  }, [programCanvas, resolve])
 
   // Closing or reloading the tab is the one thing that always stops the broadcast, so ask first.
   const onAir = output.state === 'streaming' || Boolean(live?.isLive)
@@ -149,7 +205,9 @@ function SwitcherProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     try {
       const setup: SavedSetup = {
-        sources: sources.flatMap((source) => source.saved ? [{ id: source.id, name: source.name, saved: source.saved }] : []),
+        sources: sources.flatMap((source) => source.layout
+          ? [{ id: source.id, name: source.name, saved: savedLayout(source.layout) }]
+          : source.saved ? [{ id: source.id, name: source.name, saved: source.saved, owner: source.owner }] : []),
         lowerTitle,
         lowerDetail,
         ticker,
@@ -182,9 +240,11 @@ function SwitcherProvider({ children }: { children: ReactNode }) {
     return () => window.clearInterval(timer)
   }, [])
 
+  // Everything on PROGRAM is heard: the source itself, or each source in a layout.
+  const audibleKey = (programSource.layout ? programSource.layout.slots.filter(Boolean) : [programId]).join(',')
   useEffect(() => {
-    setProgramAudio(programId)
-  }, [programId, setProgramAudio])
+    setProgramAudio(audibleKey.split(','))
+  }, [audibleKey, setProgramAudio])
 
   useEffect(() => {
     const ownedStreams = streams.current
@@ -218,7 +278,7 @@ function SwitcherProvider({ children }: { children: ReactNode }) {
 
   // Puts a captured stream on a source; the program canvas draws it from a muted video element,
   // and its sound (a shared tab or screen's) goes into the program mix.
-  const attachStream = useCallback((id: string, stream: MediaStream) => {
+  const attachStream = useCallback((id: string, stream: MediaStream, options: { monitor?: boolean } = {}) => {
     const video = document.createElement('video')
     video.muted = true
     video.playsInline = true
@@ -226,7 +286,7 @@ function SwitcherProvider({ children }: { children: ReactNode }) {
     void video.play().catch(() => undefined)
     videos.current.set(id, video)
     streams.current.set(id, stream)
-    if (stream.getAudioTracks().length) attachAudio(id, stream)
+    if (stream.getAudioTracks().length) attachAudio(id, stream, options)
     // When the camera is unplugged or "Stop sharing" is clicked, show the source as offline.
     stream.getVideoTracks()[0]?.addEventListener('ended', () => goOffline(id))
   }, [attachAudio, goOffline])
@@ -243,7 +303,7 @@ function SwitcherProvider({ children }: { children: ReactNode }) {
 
   const connect = useCallback(async (source: Source) => {
     const saved = source.saved
-    if (!saved) return
+    if (!saved || saved.kind === 'layout' || saved.kind === 'image') return
     try {
       if (saved.kind === 'playlist') {
         const playlist = (await api<Playlist[]>('/studio/playlists')).find((item) => item.id === saved.playlistId)
@@ -324,11 +384,135 @@ function SwitcherProvider({ children }: { children: ReactNode }) {
   }, [playlists, startPlaylist])
 
   const removeSource = useCallback((source: Source) => {
-    release(source.id)
-    setSources((current) => current.filter((item) => item.id !== source.id))
+    // A layout takes the cameras, screens and pictures that belong to it along with it.
+    const owned = latest.current.sources.filter((item) => item.owner === source.id).map((item) => item.id)
+    ;[source.id, ...owned].forEach(release)
+    setSources((current) => clearFromLayouts(current.filter((item) => item.id !== source.id && item.owner !== source.id), source.id))
     setPreviewId((current) => current === source.id ? 'bars' : current)
     setProgramId((current) => current === source.id ? 'bars' : current)
   }, [release])
+
+  // Adds a camera on its own, or a split / corner-screen layout with the camera in the first screen.
+  // The other screen waits for a guest (or takes one who is already connected and not placed).
+  const addCamera = useCallback(async (deviceId: string, mode: 'full' | LayoutMode) => {
+    let stream: MediaStream
+    try {
+      stream = await navigator.mediaDevices.getUserMedia({ video: { ...(deviceId ? { deviceId: { exact: deviceId } } : {}), width: 1280, height: 720 }, audio: false })
+    } catch {
+      setMessage('The camera was blocked, is in use by another app, or is unplugged.')
+      return
+    }
+    const track = stream.getVideoTracks()[0]
+    const cameraId = `camera-${Date.now()}`
+    const layoutId = `layout-${Date.now()}`
+    const cameraName = track?.label.replace(/\s*\([^)]*\)\s*$/, '').toUpperCase().slice(0, 28) || 'CAMERA'
+    const camera: Source = {
+      id: cameraId, name: cameraName, kind: 'camera', stream,
+      saved: { kind: 'camera', deviceId: track?.getSettings().deviceId ?? '' },
+      // In a layout the camera only shows inside the layout, not as a tile of its own.
+      ...(mode === 'full' ? {} : { owner: layoutId }),
+    }
+    attachStream(cameraId, stream)
+    if (mode === 'full') {
+      setSources((current) => [...current, camera])
+      setPreviewId(cameraId)
+      setMessage(`${cameraName} added to preview.`)
+      return
+    }
+    setSources((current) => {
+      const placed = new Set(current.flatMap((source) => source.layout?.slots ?? []))
+      const waitingGuest = current.find((source) => source.kind === 'guest' && !placed.has(source.id))?.id ?? null
+      const layout: Source = {
+        id: layoutId,
+        name: `${mode === 'split' ? 'SPLIT' : 'CORNER'}: ${cameraName}`,
+        kind: 'layout',
+        layout: { mode, slots: [cameraId, waitingGuest], pip: DEFAULT_PIP },
+      }
+      return [...current, camera, layout]
+    })
+    setPreviewId(layoutId)
+    setMessage(mode === 'split'
+      ? 'Split screen added to preview. The next guest who joins goes into the empty side.'
+      : 'Corner screen added to preview. The next guest who joins goes into the corner; drag it to move it.')
+  }, [attachStream])
+
+  const updateLayout = useCallback((id: string, patch: Partial<Layout>) => {
+    setSources((current) => current.map((source) => source.id === id && source.layout ? { ...source, layout: { ...source.layout, ...patch } } : source))
+  }, [])
+
+  // Changes what one screen of a layout shows. A camera, screen share or picture chosen here
+  // belongs to the layout; whatever it replaces is removed if it belonged to the layout too.
+  const setLayoutSlot = useCallback(async (layoutId: string, slot: 0 | 1, choice: SlotChoice) => {
+    let added: Source | null = null
+    try {
+      if (choice.kind === 'camera' || choice.kind === 'screen') {
+        const stream = choice.kind === 'camera'
+          ? await navigator.mediaDevices.getUserMedia({ video: { ...(choice.deviceId ? { deviceId: { exact: choice.deviceId } } : {}), width: 1280, height: 720 }, audio: false })
+          : await captureScreen()
+        const track = stream.getVideoTracks()[0]
+        const id = `${choice.kind}-${Date.now()}`
+        const label = choice.kind === 'camera' ? track?.label.replace(/\s*\([^)]*\)\s*$/, '').toUpperCase().slice(0, 28) || 'CAMERA' : 'SCREEN SHARE'
+        const saved: SavedSource = choice.kind === 'camera' ? { kind: 'camera', deviceId: track?.getSettings().deviceId ?? '' } : { kind: 'screen' }
+        attachStream(id, stream)
+        added = { id, name: label, kind: choice.kind, stream, saved, owner: layoutId }
+      } else if (choice.kind === 'image') {
+        const dataUrl = await readImage(choice.file)
+        added = { id: `image-${Date.now()}`, name: choice.file.name.replace(/\.[^.]+$/, '').toUpperCase().slice(0, 28) || 'IMAGE', kind: 'image', image: imageFrom(dataUrl), saved: { kind: 'image', dataUrl }, owner: layoutId }
+      }
+    } catch (caught) {
+      setMessage(choice.kind === 'image'
+        ? `The picture could not be used: ${caught instanceof Error ? caught.message : 'unreadable file'}`
+        : `${choice.kind === 'camera' ? 'The camera' : 'Screen sharing'} was cancelled, blocked or unavailable.`)
+      return
+    }
+    const nextId = added ? added.id : choice.kind === 'source' ? choice.id : null
+    const layout = latest.current.sources.find((source) => source.id === layoutId)?.layout
+    if (!layout) return
+    const previous = layout.slots[slot]
+    const otherSlot = layout.slots[slot === 0 ? 1 : 0]
+    const dropPrevious = previous !== null && previous !== otherSlot
+      && latest.current.sources.find((source) => source.id === previous)?.owner === layoutId
+    if (dropPrevious) release(previous)
+    setSources((current) => {
+      let next = added ? [...current, added] : current
+      if (dropPrevious) next = next.filter((source) => source.id !== previous)
+      // A source can only be in one screen of a layout at a time.
+      return next.map((source) => {
+        if (source.id !== layoutId || !source.layout) return source
+        const slots = [...source.layout.slots] as Layout['slots']
+        if (nextId && slots[slot === 0 ? 1 : 0] === nextId) slots[slot === 0 ? 1 : 0] = null
+        slots[slot] = nextId
+        return { ...source, layout: { ...source.layout, slots } }
+      })
+    })
+    setMessage(nextId ? `Screen ${slot + 1} now shows ${added?.name ?? latest.current.sources.find((source) => source.id === nextId)?.name ?? 'the chosen source'}.` : `Screen ${slot + 1} is empty and waits for the next guest.`)
+  }, [attachStream, release])
+
+  const guestLink = useGuestLink({
+    programCanvas,
+    talkbackTrack,
+    onStream: (guest: GuestInfo, stream: MediaStream) => {
+      const id = guestSourceId(guest.guestId)
+      attachStream(id, stream, { monitor: true })
+      const source: Source = { id, name: `GUEST: ${guest.name.toUpperCase().slice(0, 24)}`, kind: 'guest', stream }
+      const { programId: onProgram, previewId: onPreview } = latest.current
+      setSources((current) => placeGuest([...current.filter((item) => item.id !== id), source], id, [onProgram, onPreview]))
+      setMessage(`${guest.name} joined.`)
+    },
+    onLeft: (guestId: string) => {
+      const id = guestSourceId(guestId)
+      if (!latest.current.sources.some((source) => source.id === id)) return
+      release(id)
+      setSources((current) => clearFromLayouts(current.filter((item) => item.id !== id), id))
+      setPreviewId((current) => current === id ? 'bars' : current)
+      setProgramId((current) => current === id ? 'bars' : current)
+      setMessage('A guest left. Their screen is empty until the next guest joins.')
+    },
+  })
+
+  const drawSourceFrame = useCallback((context: CanvasRenderingContext2D, source: Source) => {
+    drawSource(context, source, videos.current, resolve)
+  }, [resolve])
 
   const cutTo = useCallback((targetId: string, from: Source) => {
     activeTransition.current = transition === 'CUT' || duration === 0
@@ -521,7 +705,15 @@ function SwitcherProvider({ children }: { children: ReactNode }) {
     programCanvas,
     output,
     live,
+    setLive,
     liveBusy,
+    addCamera,
+    updateLayout,
+    setLayoutSlot,
+    drawSourceFrame,
+    guests: guestLink.guests,
+    guestLinkOpen: guestLink.linkOpen,
+    removeGuest: guestLink.removeGuest,
     goLive,
     endBroadcast,
     schedule,
@@ -530,7 +722,8 @@ function SwitcherProvider({ children }: { children: ReactNode }) {
     automationStatus,
   }), [sources, previewSource, programSource, selectPreview, takeProgram, transition, duration, isBlack, lowerTitle, lowerDetail, ticker,
     lowerOnAir, tickerOnAir, message, addCapture, reconnectAll, removeSource, playlists, loadPlaylist, playerStatus, programCanvas, output,
-    live, liveBusy, goLive, endBroadcast, schedule, automation, setAutomation, automationStatus])
+    live, liveBusy, goLive, endBroadcast, schedule, automation, setAutomation, automationStatus, addCamera, updateLayout, setLayoutSlot, drawSourceFrame,
+    guestLink.guests, guestLink.linkOpen, guestLink.removeGuest])
 
   return <SwitcherContext.Provider value={value}>{children}</SwitcherContext.Provider>
 }

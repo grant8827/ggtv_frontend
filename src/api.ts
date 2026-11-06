@@ -20,11 +20,25 @@ export type PlayoutStatus = {
   error: string | null
 }
 
+export type RestreamPlatform = 'youtube' | 'facebook'
+
+export type RestreamStatus = {
+  name: string
+  serverUrl: string
+  streamKeySet: boolean
+  // Only the last few characters of the saved key are ever sent back.
+  streamKeyHint: string
+  state: 'off' | 'connecting' | 'live'
+  error: string | null
+  startedAt: string | null
+}
+
 export type StudioLive = LiveStatus & {
   streamName: string
   streamKey: string
   rtmpUrl: string
   playout: PlayoutStatus
+  restream: Record<RestreamPlatform, RestreamStatus>
 }
 
 // A break plays its own videos once, interrupting whatever is on, then hands back.
