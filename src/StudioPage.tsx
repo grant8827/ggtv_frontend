@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import {
   AlertTriangle,
+  BadgeCheck,
   Bot,
   Camera,
   Captions,
@@ -21,7 +22,7 @@ import {
   X,
 } from 'lucide-react'
 import { describeEntry, formatDay, formatTime } from './api'
-import { OUTPUT_HEIGHT, OUTPUT_WIDTH, type Source } from './studio/programCompositor'
+import { OUTPUT_HEIGHT, OUTPUT_WIDTH, type LogoCorner, type Source } from './studio/programCompositor'
 import { useSwitcher } from './studio/switcherContext'
 import { MicControl, RestreamControl } from './studio/OutputControls'
 import { AddCameraControl, LayoutCanvas, LayoutOverlay } from './studio/LayoutControls'
@@ -328,7 +329,7 @@ function StudioPage() {
         </section>
 
         <section className="control-panel">
-          <div className="control-panel-heading"><h2>On-air graphics</h2><span>LOWER THIRD · TICKER</span></div>
+          <div className="control-panel-heading"><h2>On-air graphics</h2><span>LOWER THIRD · TICKER · LOGO</span></div>
           <div className="graphics-form">
             <label className="field-label">Headline
               <input className="text-input" value={switcher.lowerTitle} onChange={(event) => switcher.setLowerTitle(event.target.value)} maxLength={48} />
@@ -339,12 +340,23 @@ function StudioPage() {
             <label className="field-label">Ticker message
               <input className="text-input" value={switcher.ticker} onChange={(event) => switcher.setTicker(event.target.value)} maxLength={100} />
             </label>
+            <label className="field-label">Logo position
+              <select className="text-input" value={switcher.logoCorner} onChange={(event) => switcher.setLogoCorner(event.target.value as LogoCorner)}>
+                <option value="top-right">Top right</option>
+                <option value="top-left">Top left</option>
+                <option value="bottom-right">Bottom right</option>
+                <option value="bottom-left">Bottom left</option>
+              </select>
+            </label>
             <div className="graphics-actions">
               <button className={switcher.lowerOnAir ? 'button button-danger' : 'button button-dark'} type="button" onClick={switcher.toggleLower}>
                 <Captions size={14} /> {switcher.lowerOnAir ? 'TAKE LOWER OFF' : 'TAKE LOWER'}
               </button>
               <button className={switcher.tickerOnAir ? 'button button-danger' : 'button button-muted'} type="button" onClick={switcher.toggleTicker}>
                 <Signal size={14} /> {switcher.tickerOnAir ? 'TAKE TICKER OFF' : 'TAKE TICKER'}
+              </button>
+              <button className={switcher.logoOnAir ? 'button button-danger' : 'button button-muted'} type="button" onClick={switcher.toggleLogo} aria-pressed={switcher.logoOnAir}>
+                <BadgeCheck size={14} /> {switcher.logoOnAir ? 'TAKE LOGO OFF' : 'TAKE LOGO'}
               </button>
             </div>
           </div>

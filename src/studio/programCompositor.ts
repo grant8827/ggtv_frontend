@@ -62,8 +62,11 @@ export type ProgramScene = {
   source: Source
   lowerThird: { title: string; detail: string } | null
   ticker: string
+  logo: { image: HTMLImageElement; corner: LogoCorner } | null
   black: boolean
 }
+
+export type LogoCorner = 'top-right' | 'top-left' | 'bottom-right' | 'bottom-left'
 
 export type Transition = {
   from: Source
@@ -195,6 +198,27 @@ function drawTicker(ctx: CanvasRenderingContext2D, text: string, now: number) {
   ctx.restore()
 }
 
+// The channel logo ("bug") as a small rounded badge in a corner, kept clear of the ticker.
+function drawLogo(ctx: CanvasRenderingContext2D, image: HTMLImageElement, corner: LogoCorner, tickerOn: boolean) {
+  if (!image.complete || !image.naturalWidth) return
+  const height = 72
+  const width = image.naturalWidth * (height / image.naturalHeight)
+  const margin = 28
+  const x = corner.endsWith('right') ? OUTPUT_WIDTH - margin - width : margin
+  const y = corner.startsWith('top') ? margin : OUTPUT_HEIGHT - margin - height - (tickerOn ? 44 : 0)
+  ctx.save()
+  ctx.shadowColor = 'rgba(0, 0, 0, 0.35)'
+  ctx.shadowBlur = 12
+  ctx.beginPath()
+  ctx.roundRect(x, y, width, height, 8)
+  ctx.fillStyle = '#ffffff'
+  ctx.fill()
+  ctx.shadowColor = 'transparent'
+  ctx.clip()
+  ctx.drawImage(image, x, y, width, height)
+  ctx.restore()
+}
+
 // Draws one frame of the program output. What this draws is exactly what the output sends.
 export function drawProgram(
   ctx: CanvasRenderingContext2D,
@@ -233,6 +257,7 @@ export function drawProgram(
 
   if (scene.lowerThird) drawLowerThird(ctx, scene.lowerThird.title, scene.lowerThird.detail)
   if (scene.ticker) drawTicker(ctx, scene.ticker, now)
+  if (scene.logo) drawLogo(ctx, scene.logo.image, scene.logo.corner, Boolean(scene.ticker))
   if (scene.black) {
     ctx.fillStyle = '#000000'
     ctx.fillRect(0, 0, OUTPUT_WIDTH, OUTPUT_HEIGHT)

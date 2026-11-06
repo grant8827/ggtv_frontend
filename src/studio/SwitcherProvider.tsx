@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { api, errorMessage, type Playlist, type ScheduleEntry, type StudioLive } from '../api'
 import { createPlaylistPlayer, type PlaylistPlayer } from './playlistPlayer'
-import { DEFAULT_PIP, drawProgram, drawSource, OUTPUT_HEIGHT, OUTPUT_WIDTH, type Layout, type LayoutMode, type ProgramScene, type SavedSource, type Source, type Transition } from './programCompositor'
+import { DEFAULT_PIP, drawProgram, drawSource, OUTPUT_HEIGHT, OUTPUT_WIDTH, type Layout, type LayoutMode, type LogoCorner, type ProgramScene, type SavedSource, type Source, type Transition } from './programCompositor'
 import { useGuestLink, type GuestInfo } from './guestLink'
 import { SwitcherContext, type Automation, type AutomationStatus, type SlotChoice, type Switcher } from './switcherContext'
 import { useSwitcherOutput } from './useSwitcherOutput'
@@ -18,6 +18,7 @@ type SavedSetup = {
   duration: number
   fillPlaylistId: string
   liveSourceId: string
+  logoCorner: LogoCorner
 }
 
 const AUTOMATION_OFF: AutomationStatus = { mode: 'off', text: 'The schedule is off. PROGRAM is under manual control.', slotId: null, warning: null }
@@ -31,7 +32,7 @@ const breakSourceId = (breakId: string) => `auto-break-${breakId}`
 function readSetup(): SavedSetup {
   const fallback: SavedSetup = {
     sources: [], lowerTitle: 'LIVE FROM GGTV', lowerDetail: 'Broadcast control room', ticker: 'WELCOME TO GGTV LIVE',
-    transition: 'CUT', duration: 350, fillPlaylistId: '', liveSourceId: '',
+    transition: 'CUT', duration: 350, fillPlaylistId: '', liveSourceId: '', logoCorner: 'top-right',
   }
   try {
     const stored = JSON.parse(localStorage.getItem(STORAGE_KEY) ?? 'null')
@@ -128,6 +129,14 @@ function SwitcherProvider({ children }: { children: ReactNode }) {
   const [ticker, setTicker] = useState(initial.ticker)
   const [lowerOnAir, setLowerOnAir] = useState(false)
   const [tickerOnAir, setTickerOnAir] = useState(false)
+  const [logoOnAir, setLogoOnAir] = useState(false)
+  const [logoCorner, setLogoCorner] = useState<LogoCorner>(initial.logoCorner)
+  // The GGTV logo, loaded once for the on-air logo.
+  const [logoImage] = useState(() => {
+    const image = new Image()
+    image.src = '/logo.png'
+    return image
+  })
   const [message, setMessage] = useState('Load a source to preview, then TAKE it to program.')
   const [playlists, setPlaylists] = useState<Playlist[]>([])
   const [playerStatus, setPlayerStatus] = useState<Record<string, { text: string; isError?: boolean }>>({})
@@ -165,6 +174,7 @@ function SwitcherProvider({ children }: { children: ReactNode }) {
       source: programSource,
       lowerThird: lowerOnAir ? { title: lowerTitle, detail: lowerDetail } : null,
       ticker: tickerOnAir ? ticker : '',
+      logo: logoOnAir ? { image: logoImage, corner: logoCorner } : null,
       black: isBlack,
     }
   })
@@ -215,12 +225,13 @@ function SwitcherProvider({ children }: { children: ReactNode }) {
         duration,
         fillPlaylistId: automation.fillPlaylistId,
         liveSourceId: automation.liveSourceId,
+        logoCorner,
       }
       localStorage.setItem(STORAGE_KEY, JSON.stringify(setup))
     } catch {
       // Storage can be unavailable (private windows); the switcher still works without it.
     }
-  }, [sources, lowerTitle, lowerDetail, ticker, transition, duration, automation.fillPlaylistId, automation.liveSourceId])
+  }, [sources, lowerTitle, lowerDetail, ticker, transition, duration, automation.fillPlaylistId, automation.liveSourceId, logoCorner])
 
   // Playlists and the schedule are edited on their own tabs; pick up changes regularly.
   useEffect(() => {
@@ -694,6 +705,10 @@ function SwitcherProvider({ children }: { children: ReactNode }) {
     toggleLower: () => setLowerOnAir((current) => !current),
     tickerOnAir,
     toggleTicker: () => setTickerOnAir((current) => !current),
+    logoOnAir,
+    toggleLogo: () => setLogoOnAir((current) => !current),
+    logoCorner,
+    setLogoCorner,
     message,
     addCapture,
     reconnectAll,
@@ -721,7 +736,7 @@ function SwitcherProvider({ children }: { children: ReactNode }) {
     setAutomation,
     automationStatus,
   }), [sources, previewSource, programSource, selectPreview, takeProgram, transition, duration, isBlack, lowerTitle, lowerDetail, ticker,
-    lowerOnAir, tickerOnAir, message, addCapture, reconnectAll, removeSource, playlists, loadPlaylist, playerStatus, programCanvas, output,
+    lowerOnAir, tickerOnAir, logoOnAir, logoCorner, message, addCapture, reconnectAll, removeSource, playlists, loadPlaylist, playerStatus, programCanvas, output,
     live, liveBusy, goLive, endBroadcast, schedule, automation, setAutomation, automationStatus, addCamera, updateLayout, setLayoutSlot, drawSourceFrame,
     guestLink.guests, guestLink.linkOpen, guestLink.removeGuest])
 

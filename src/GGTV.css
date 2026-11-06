@@ -127,7 +127,7 @@
 .studio-message { min-height: 15px; margin: 10px 0 0; color: #77847c; font-size: 10px; }
 .graphics-form { display: grid; gap: 9px; }
 .field-label { display: grid; gap: 5px; color: #66736b; font: 700 9px var(--mono); text-transform: uppercase; }
-.graphics-actions { display: flex; gap: 7px; margin-top: 2px; }
+.graphics-actions { display: flex; flex-wrap: wrap; gap: 7px; margin-top: 2px; }
 .graphics-actions .button { flex: 1; min-height: 35px; padding-inline: 8px; font-size: 9px; }
 .studio-footer { display: flex; justify-content: space-between; gap: 10px; margin-top: 15px; color: #68766e; font: 9px var(--mono); }
 .studio-footer span { display: inline-flex; align-items: center; gap: 6px; }

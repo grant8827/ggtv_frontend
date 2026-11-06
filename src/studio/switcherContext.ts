@@ -1,6 +1,6 @@
 import { createContext, useContext } from 'react'
 import type { Playlist, ScheduleEntry, StudioLive } from '../api'
-import type { Layout, LayoutMode, Source } from './programCompositor'
+import type { Layout, LayoutMode, LogoCorner, Source } from './programCompositor'
 import type { GuestInfo } from './guestLink'
 import type { useSwitcherOutput } from './useSwitcherOutput'
 
@@ -26,6 +26,10 @@ export type Switcher = {
   toggleLower: () => void
   tickerOnAir: boolean
   toggleTicker: () => void
+  logoOnAir: boolean
+  toggleLogo: () => void
+  logoCorner: LogoCorner
+  setLogoCorner: (corner: LogoCorner) => void
   message: string
   addCapture: (kind: 'camera' | 'screen') => Promise<void>
   reconnectAll: () => Promise<void>
