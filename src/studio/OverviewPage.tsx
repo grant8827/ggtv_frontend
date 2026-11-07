@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { ArrowRight, CalendarClock, ListVideo, Plug, RadioTower } from 'lucide-react'
-import { api, describeEntry, errorMessage, formatDay, formatTime, type Playlist, type ScheduleEntry, type StudioLive } from '../api'
+import { api, describeEntry, errorMessage, expandBreaks, formatDay, formatTime, type Playlist, type ScheduleEntry, type StudioLive } from '../api'
 
 function OverviewPage() {
   const [live, setLive] = useState<StudioLive | null>(null)
@@ -17,7 +17,7 @@ function OverviewPage() {
     ])
       .then(([liveState, entries, lists]) => {
         setLive(liveState)
-        setSchedule(entries)
+        setSchedule(expandBreaks(entries))
         setPlaylists(lists)
       })
       .catch((caught) => setError(errorMessage(caught)))

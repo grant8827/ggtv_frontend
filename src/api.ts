@@ -53,7 +53,66 @@ export type ScheduleEntry = {
   kind: ScheduleKind
   playlistId: string | null
   playlistName?: string | null
+  // A break's videos, or a playlist slot's own videos (instead of a saved playlist).
   items?: PlaylistItem[]
+  updatedAt?: string
+  // Breaks only: how often it plays (null or missing = once).
+  repeat?: BreakRepeat | null
+  // A repeating break's plays from a day ago to two days ahead, and whether it has none left.
+  occurrences?: { start: string; end: string }[]
+  finished?: boolean
+  // Set on one play of a repeating break: the break it belongs to.
+  seriesId?: string
+}
+
+export type RepeatFrequency = 'once' | 'daily' | 'weekly' | 'monthly'
+
+// Days and times are in `timeZone`, the studio's time zone when the break was saved.
+export type BreakRepeat = {
+  frequency: RepeatFrequency
+  weekdays: number[] // 0 = Sunday, for weekly breaks
+  everyMinutes: number // 0 = once on each day; otherwise again every N minutes…
+  untilTime: string | null // …until this time ('HH:MM')
+  endDate: string | null // last day ('YYYY-MM-DD'), or null for no end
+  timeZone: string
+}
+
+export const WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
+
+const clockLabel = (hhmm: string) => {
+  const [hours, minutes] = hhmm.split(':').map(Number)
+  return new Date(2000, 0, 1, hours, minutes).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })
+}
+
+export const everyLabel = (minutes: number) => minutes % 60 === 0
+  ? `${minutes / 60} hour${minutes === 60 ? '' : 's'}`
+  : minutes > 60 ? `${Math.floor(minutes / 60)} h ${minutes % 60} min` : `${minutes} minutes`
+
+// e.g. "Every Mon, Fri at 9:00 AM, then every 30 minutes until 5:00 PM, until Dec 31"
+export function repeatSummary(repeat: BreakRepeat | null | undefined, start: string) {
+  const time = new Date(start).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })
+  if (!repeat || repeat.frequency === 'once') return `Once, ${formatDay(start)} at ${time}`
+  const days = repeat.frequency === 'daily' ? 'Every day'
+    : repeat.frequency === 'weekly' ? `Every ${repeat.weekdays.map((day) => WEEKDAYS[day]).join(', ')}`
+      : `Every month on the ${ordinal(new Date(start).getDate())}`
+  const during = repeat.everyMinutes && repeat.untilTime ? `, then every ${everyLabel(repeat.everyMinutes)} until ${clockLabel(repeat.untilTime)}` : ''
+  const ends = repeat.endDate ? `, until ${new Date(`${repeat.endDate}T12:00`).toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' })}` : ''
+  return `${days} at ${time}${during}${ends}`
+}
+
+function ordinal(day: number) {
+  const suffix = day % 10 === 1 && day !== 11 ? 'st' : day % 10 === 2 && day !== 12 ? 'nd' : day % 10 === 3 && day !== 13 ? 'rd' : 'th'
+  return `${day}${suffix}`
+}
+
+// Turns each repeating break into one entry per play, so automation treats every play like a
+// one-off break (each with its own id, played once).
+export function expandBreaks(entries: ScheduleEntry[]) {
+  return entries
+    .flatMap((entry) => entry.occurrences
+      ? entry.occurrences.map((time) => ({ ...entry, ...time, id: `${entry.id}@${time.start}`, seriesId: entry.id, occurrences: undefined }))
+      : [entry])
+    .sort((a, b) => a.start.localeCompare(b.start))
 }
 
 export type PlaylistItem = {
@@ -122,7 +181,11 @@ export function errorMessage(error: unknown) {
 // How a schedule entry is labelled in rundowns.
 export function describeEntry(entry: ScheduleEntry) {
   if (entry.kind === 'live') return 'LIVE SHOW'
-  if (entry.kind === 'break') return `BREAK · ${entry.items?.length ?? 0} VIDEO${entry.items?.length === 1 ? '' : 'S'}`
+  if (entry.kind === 'break') {
+    const repeats = entry.repeat && entry.repeat.frequency !== 'once' ? ` · REPEATS ${entry.repeat.frequency.toUpperCase()}` : ''
+    return `BREAK · ${entry.items?.length ?? 0} VIDEO${entry.items?.length === 1 ? '' : 'S'}${repeats}`
+  }
+  if (entry.items) return `VIDEOS · ${entry.items.length} VIDEO${entry.items.length === 1 ? '' : 'S'} · LOOPING`
   return `PLAYLIST · ${entry.playlistName ?? 'missing'}`
 }
 

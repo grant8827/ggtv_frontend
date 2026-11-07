@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
-import { api, errorMessage, type Playlist, type ScheduleEntry, type StudioLive } from '../api'
+import { api, errorMessage, expandBreaks, type Playlist, type ScheduleEntry, type StudioLive } from '../api'
 import { createPlaylistPlayer, type PlaylistPlayer } from './playlistPlayer'
 import { DEFAULT_PIP, drawProgram, drawSource, OUTPUT_HEIGHT, OUTPUT_WIDTH, type Layout, type LayoutMode, type LogoCorner, type ProgramScene, type SavedSource, type Source, type Transition } from './programCompositor'
 import { useGuestLink, type GuestInfo } from './guestLink'
@@ -237,7 +237,7 @@ function SwitcherProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     const refresh = () => {
       api<Playlist[]>('/studio/playlists').then(setPlaylists).catch(() => undefined)
-      api<ScheduleEntry[]>('/studio/schedule').then(setSchedule).catch(() => undefined)
+      api<ScheduleEntry[]>('/studio/schedule').then((list) => setSchedule(expandBreaks(list))).catch(() => undefined)
     }
     refresh()
     const timer = window.setInterval(refresh, 30000)
@@ -569,8 +569,11 @@ function SwitcherProvider({ children }: { children: ReactNode }) {
       let warning: string | null = null
 
       if (slot?.kind === 'playlist') {
-        const playlist = playlists.find((item) => item.id === slot.playlistId)
-        if (playlist) {
+        // A slot plays a saved playlist, or videos picked for that slot alone.
+        const playlist = slot.items
+          ? { id: slot.id, name: slot.title, items: slot.items, updatedAt: slot.updatedAt ?? '' }
+          : playlists.find((item) => item.id === slot.playlistId)
+        if (playlist?.items.length) {
           target = ensurePlaylistSource(slotSourceId(slot.id), playlist, `SCHEDULED: ${slot.title.toUpperCase()}`)
           mode = 'playlist'
         } else warning = `"${slot.title}" uses a playlist that no longer exists.`
