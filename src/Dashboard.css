@@ -317,6 +317,10 @@
 .slot-menu button.guest-item { padding: 5px 8px; }
 .guest-thumb { flex: 0 0 auto; width: 64px; aspect-ratio: 16 / 9; object-fit: cover; background: #17211d; border-radius: 3px; }
 .slot-menu button.guest-item span { overflow: hidden; text-overflow: ellipsis; }
+.slot-menu-pending { display: flex; align-items: center; gap: 8px; padding: 7px 8px; overflow: hidden; color: var(--muted); white-space: nowrap; font: italic 12px var(--mono); }
+.slot-menu-pending span { overflow: hidden; text-overflow: ellipsis; }
+.slot-menu-pending svg { flex: 0 0 auto; }
+.slot-menu-pending.failed { color: #b2382f; }
 
 /* ---------- schedule: date & time, repeating breaks ---------- */
 .date-time-fields { display: grid; grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr); gap: 6px; }

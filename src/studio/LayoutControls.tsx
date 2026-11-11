@@ -134,13 +134,16 @@ function GuestThumb({ stream }: { stream?: MediaStream }) {
 
 // The right-click menu for one layout screen: a camera, a picture, a screen share, a guest, or empty.
 function SlotMenu({ layoutId, slot, x, y, onClose }: { layoutId: string; slot: 0 | 1; x: number; y: number; onClose: () => void }) {
-  const { sources, setLayoutSlot } = useSwitcher()
+  const { sources, setLayoutSlot, guests: calls } = useSwitcher()
   const [cameras, setCameras] = useState<MediaDeviceInfo[]>([])
   const menuRef = useRef<HTMLDivElement>(null)
   const fileRef = useRef<HTMLInputElement>(null)
   const layout = sources.find((source) => source.id === layoutId)?.layout
   const current = layout?.slots[slot] ?? null
   const guests = sources.filter((source) => source.kind === 'guest')
+  // Guests who opened their link but whose video call hasn't finished connecting yet. They can't
+  // go on a screen until it does, but listing them shows the operator where the call is stuck.
+  const pending = calls.filter((call) => !guests.some((guest) => guest.id === `guest-${call.guestId}`))
   const shared = sources.filter((source) => !source.owner && !source.layout && !source.auto && source.kind !== 'guest' && source.kind !== 'pattern' && !source.offline)
 
   useEffect(() => {
@@ -186,6 +189,12 @@ function SlotMenu({ layoutId, slot, x, y, onClose }: { layoutId: string; slot: 0
           <GuestThumb stream={guest.stream} />
           <span>{guest.name.replace(/^GUEST:\s*/, '')}{guest.id === current ? ' · ON THIS SCREEN' : ''}</span>
         </button>
+      ))}
+      {pending.map((call) => (
+        <div key={call.guestId} className={call.state === 'failed' ? 'slot-menu-pending failed' : 'slot-menu-pending'} role="status">
+          <UserRound size={13} />
+          <span>{call.name} · {call.state === 'failed' ? "couldn't connect (network)" : 'connecting…'}</span>
+        </div>
       ))}
       <button type="button" role="menuitem" className={current === null ? 'current' : ''} onClick={() => choose({ kind: 'empty' })}>
         <UserRound size={13} /> {guests.length ? 'Wait for another guest' : 'Guest (waiting for one to join)'}
