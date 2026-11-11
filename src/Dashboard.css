@@ -336,3 +336,8 @@
 .schedule-form .playlist-item-fields { grid-template-columns: minmax(0, 1fr) 92px; flex-basis: calc(100% - 50px); }
 .schedule-form .playlist-item-fields > :nth-child(2) { grid-column: 1 / -1; order: 3; }
 .schedule-form .playlist-item-actions { width: 100%; justify-content: flex-end; }
+
+/* Shown above every studio page while guests are connected but can't be heard or can't hear the studio. */
+.studio-sound-alert { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin: 16px 24px 0; padding: 10px 14px; color: #f2dfbe; background: #3a2c17; border: 1px solid #6b4f24; border-radius: 6px; font-size: 13px; }
+.studio-sound-alert span { flex: 1; min-width: 200px; }
+.guest-sound-button { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); z-index: 2; }

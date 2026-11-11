@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useParams } from 'react-router-dom'
-import { Mic, MicOff, PhoneOff, Video, VideoOff } from 'lucide-react'
+import { Mic, MicOff, PhoneOff, Video, VideoOff, Volume2 } from 'lucide-react'
 
 type Phase = 'loading' | 'invalid' | 'setup' | 'waiting' | 'connecting' | 'live' | 'ended'
 
@@ -36,6 +36,8 @@ function GuestPage() {
   const [micId, setMicId] = useState('')
   const [micOn, setMicOn] = useState(true)
   const [cameraOn, setCameraOn] = useState(true)
+  // The browser refused to start the show with sound (autoplay rules, mostly phones); a tap fixes it.
+  const [soundBlocked, setSoundBlocked] = useState(false)
   const selfView = useRef<HTMLVideoElement>(null)
   const showView = useRef<HTMLVideoElement>(null)
   const localRef = useRef<MediaStream | null>(null)
@@ -121,10 +123,13 @@ function GuestPage() {
       const remote = new MediaStream()
       pc.ontrack = (event) => {
         remote.addTrack(event.track)
-        if (showView.current && showView.current.srcObject !== remote) {
-          showView.current.srcObject = remote
-          void showView.current.play().catch(() => undefined)
-        }
+        const view = showView.current
+        if (!view) return
+        if (view.srcObject !== remote) view.srcObject = remote
+        // Played again for each track, so the studio's audio starts as well as its video.
+        view.play().then(() => setSoundBlocked(false)).catch((error: DOMException) => {
+          if (error.name === 'NotAllowedError') setSoundBlocked(true)
+        })
       }
       pc.onicecandidate = (event) => event.candidate && send({ candidate: event.candidate.toJSON() })
       pc.onconnectionstatechange = () => {
@@ -200,6 +205,13 @@ function GuestPage() {
     setPhase('ended')
   }
 
+  const enableSound = () => {
+    const view = showView.current
+    if (!view) return
+    view.muted = false
+    view.play().then(() => setSoundBlocked(false)).catch(() => undefined)
+  }
+
   const toggleMic = () => {
     const next = !micOn
     localRef.current?.getAudioTracks().forEach((track) => { track.enabled = next })
@@ -263,6 +275,11 @@ function GuestPage() {
             <video ref={showView} autoPlay playsInline />
             {phase !== 'live' && <div className="guest-show-wait">{statusText}</div>}
             <span className="guest-show-label">THE SHOW</span>
+            {soundBlocked && (
+              <button className="button button-primary guest-sound-button" type="button" onClick={enableSound}>
+                <Volume2 size={14} /> TAP TO HEAR THE STUDIO
+              </button>
+            )}
             <div className="guest-self"><video ref={selfView} autoPlay muted playsInline /></div>
           </div>
           <p className="guest-copy" role="status">{statusText}{note ? ` ${note}` : ''}</p>

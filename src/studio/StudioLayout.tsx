@@ -1,5 +1,5 @@
 import { NavLink, Outlet } from 'react-router-dom'
-import { CalendarClock, ExternalLink, LayoutDashboard, ListVideo, LogOut, MonitorPlay, RadioTower, Users } from 'lucide-react'
+import { CalendarClock, ExternalLink, LayoutDashboard, ListVideo, LogOut, Mic, MonitorPlay, RadioTower, Users, Volume2 } from 'lucide-react'
 import { useAuth } from '../auth'
 import { useSwitcher } from './switcherContext'
 
@@ -48,6 +48,20 @@ function StudioLayout() {
       </aside>
 
       <div className="dash-main">
+        {guests.length > 0 && output.audioBlocked && (
+          <div className="studio-sound-alert" role="alert">
+            <Volume2 size={15} />
+            <span>Sound is paused by the browser, so you can't hear guests and they can't hear you.</span>
+            <button className="button button-primary" type="button" onClick={output.unlockAudio}>TURN SOUND ON</button>
+          </div>
+        )}
+        {guests.length > 0 && !output.audioBlocked && !output.micOn && (
+          <div className="studio-sound-alert" role="status">
+            <Mic size={15} />
+            <span>Your mic is off, so guests can't hear you.</span>
+            <button className="button button-primary" type="button" onClick={() => void output.turnMicOn()}>TURN MIC ON</button>
+          </div>
+        )}
         <Outlet />
       </div>
     </div>
