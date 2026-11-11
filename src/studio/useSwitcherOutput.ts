@@ -32,6 +32,10 @@ export function useSwitcherOutput(canvasRef: RefObject<HTMLCanvasElement | null>
   const [state, setState] = useState<OutputState>('idle')
   const [message, setMessage] = useState('')
   const [micOn, setMicOn] = useState(false)
+  // True while the browser keeps the audio graph paused. Chrome starts an AudioContext paused when
+  // it is created outside a click (e.g. when a guest connects), and then nothing is heard here and
+  // guests hear nothing from the studio until a click or key press resumes it.
+  const [audioBlocked, setAudioBlocked] = useState(false)
   const [micDeviceId, setMicDeviceId] = useState(savedMicDevice)
   const micDeviceRef = useRef(micDeviceId)
   const socket = useRef<WebSocket | null>(null)
@@ -45,6 +49,8 @@ export function useSwitcherOutput(canvasRef: RefObject<HTMLCanvasElement | null>
   const ensureAudio = useCallback(() => {
     if (!audio.current) {
       const context = new AudioContext()
+      setAudioBlocked(context.state === 'suspended')
+      context.addEventListener('statechange', () => setAudioBlocked(context.state === 'suspended'))
       const destination = context.createMediaStreamDestination()
       // A destination with nothing connected produces no audio at all, and MediaRecorder then
       // waits for audio and records nothing. A constant zero signal keeps silent audio flowing.
@@ -93,6 +99,24 @@ export function useSwitcherOutput(canvasRef: RefObject<HTMLCanvasElement | null>
       if (context) gain.gain.setTargetAtTime(programIds.current.has(sourceId) ? 1 : 0, context.currentTime, 0.08)
     })
   }, [])
+
+  // Resumes a paused audio graph. Only works from inside a click or key press.
+  const unlockAudio = useCallback(() => {
+    const context = audio.current?.context
+    if (context?.state === 'suspended') void context.resume()
+  }, [])
+
+  // Any click or key press in the studio resumes the audio graph, so sound starts as soon as the
+  // operator does anything, without a separate "enable sound" step.
+  useEffect(() => {
+    const options = { capture: true }
+    document.addEventListener('pointerdown', unlockAudio, options)
+    document.addEventListener('keydown', unlockAudio, options)
+    return () => {
+      document.removeEventListener('pointerdown', unlockAudio, options)
+      document.removeEventListener('keydown', unlockAudio, options)
+    }
+  }, [unlockAudio])
 
   // The audio track sent back to guests (the studio mic when it is on, otherwise silence).
   const talkbackTrack = useCallback(() => {
@@ -257,5 +281,5 @@ export function useSwitcherOutput(canvasRef: RefObject<HTMLCanvasElement | null>
     void audio.current?.context.close()
   }, [])
 
-  return { state, message, micOn, micDeviceId, start, stop, turnMicOn, turnMicOff, chooseMic, attachAudio, detachAudio, setProgramAudio, talkbackTrack }
+  return { state, message, micOn, micDeviceId, audioBlocked, unlockAudio, start, stop, turnMicOn, turnMicOff, chooseMic, attachAudio, detachAudio, setProgramAudio, talkbackTrack }
 }
