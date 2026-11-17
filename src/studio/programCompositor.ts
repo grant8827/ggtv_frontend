@@ -63,6 +63,8 @@ export type ProgramScene = {
   lowerThird: { title: string; detail: string } | null
   ticker: string
   logo: { image: HTMLImageElement; corner: LogoCorner } | null
+  // When the scheduled breaks start (ms since 1970), for the "BK:10" countdown before each.
+  breakStarts: number[]
   black: boolean
 }
 
@@ -219,6 +221,40 @@ function drawLogo(ctx: CanvasRenderingContext2D, image: HTMLImageElement, corner
   ctx.restore()
 }
 
+// "BK:10" … "BK:01" in the top-right corner for the last ten seconds before a break (below the
+// logo when the logo is in that corner). Matches the countdown the server draws on its playout.
+const COUNTDOWN_MS = 10_000
+function drawBreakCountdown(ctx: CanvasRenderingContext2D, breakStarts: number[], logoTopRight: boolean) {
+  const now = Date.now()
+  const breakAt = breakStarts.find((start) => start > now && start - now <= COUNTDOWN_MS)
+  if (breakAt === undefined) return
+  const remaining = breakAt - now
+  const seconds = Math.ceil(remaining / 1000)
+  const width = 224
+  const height = 76
+  const x = OUTPUT_WIDTH - 32 - width
+  const y = logoTopRight ? 28 + 72 + 14 : 32
+  ctx.save()
+  ctx.beginPath()
+  ctx.roundRect(x, y, width, height, 10)
+  ctx.fillStyle = 'rgba(12, 21, 17, 0.86)'
+  ctx.fill()
+  ctx.lineWidth = 2
+  ctx.strokeStyle = 'rgba(255, 255, 255, 0.22)'
+  ctx.stroke()
+  ctx.beginPath()
+  ctx.roundRect(x + 18, y + 22, 54, 32, 5)
+  ctx.fillStyle = '#d81f26'
+  ctx.fill()
+  ctx.fillStyle = '#ffffff'
+  ctx.textBaseline = 'middle'
+  ctx.font = '800 26px "Helvetica Neue", Arial, sans-serif'
+  ctx.fillText('BK', x + 26, y + 39)
+  ctx.font = '800 46px "Helvetica Neue", Arial, sans-serif'
+  ctx.fillText(`:${String(seconds).padStart(2, '0')}`, x + 84, y + 40)
+  ctx.restore()
+}
+
 // Draws one frame of the program output. What this draws is exactly what the output sends.
 export function drawProgram(
   ctx: CanvasRenderingContext2D,
@@ -258,6 +294,7 @@ export function drawProgram(
   if (scene.lowerThird) drawLowerThird(ctx, scene.lowerThird.title, scene.lowerThird.detail)
   if (scene.ticker) drawTicker(ctx, scene.ticker, now)
   if (scene.logo) drawLogo(ctx, scene.logo.image, scene.logo.corner, Boolean(scene.ticker))
+  if (scene.breakStarts.length) drawBreakCountdown(ctx, scene.breakStarts, scene.logo?.corner === 'top-right')
   if (scene.black) {
     ctx.fillStyle = '#000000'
     ctx.fillRect(0, 0, OUTPUT_WIDTH, OUTPUT_HEIGHT)

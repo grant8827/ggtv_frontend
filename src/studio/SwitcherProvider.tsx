@@ -169,12 +169,18 @@ function SwitcherProvider({ children }: { children: ReactNode }) {
   })
   const resolve = useCallback((id: string) => latest.current.sources.find((source) => source.id === id), [])
 
+  // Breaks the schedule automation will play, for the countdown drawn before each one.
+  const breakStarts = useMemo(() => automation.on
+    ? schedule.filter((entry) => entry.kind === 'break' && entry.items?.length).map((entry) => Date.parse(entry.start))
+    : [], [automation.on, schedule])
+
   useEffect(() => {
     scene.current = {
       source: programSource,
       lowerThird: lowerOnAir ? { title: lowerTitle, detail: lowerDetail } : null,
       ticker: tickerOnAir ? ticker : '',
       logo: logoOnAir ? { image: logoImage, corner: logoCorner } : null,
+      breakStarts,
       black: isBlack,
     }
   })
