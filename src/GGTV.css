@@ -34,7 +34,9 @@
 .watch-page .player-meta, .watch-page .stream-setup, .watch-page .schedule-panel { width: min(100%, calc((100svh - 110px) * 16 / 9)); margin-inline: auto; }
 .watch-page .epg-list { grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); }
 .watch-page .epg-row { border-right: 1px solid #e9eeea; }
-.player-corner-logo { position: absolute; z-index: 2; top: 2.4%; left: 2%; width: clamp(64px, 11%, 170px); height: auto; filter: drop-shadow(0 2px 6px #000a); pointer-events: none; }
+.player-sound { position: absolute; z-index: 3; top: 3%; right: 2%; display: inline-flex; align-items: center; gap: 7px; padding: 9px 12px; color: white; background: #0c1511d9; border: 1px solid #ffffff33; border-radius: 4px; font: 700 10px/1 var(--mono); letter-spacing: .08em; cursor: pointer; }
+.player-sound:hover { background: #0c1511; }
+.player-corner-logo { position: absolute; z-index: 2; bottom: max(4%, 48px); left: 2%; width: clamp(64px, 11%, 170px); height: auto; filter: drop-shadow(0 2px 6px #000a); pointer-events: none; }
 .viewer-column { min-width: 0; }
 .player-frame { position: relative; overflow: hidden; aspect-ratio: 16 / 9; background: #080d0b; border: 1px solid #27332e; border-radius: 7px; box-shadow: 0 16px 38px #111b1718; }
 .hls-video { display: block; width: 100%; height: 100%; object-fit: contain; background: #080d0b; }

@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import Hls from 'hls.js'
-import { Radio, Signal } from 'lucide-react'
+import { Radio, Signal, Volume2 } from 'lucide-react'
 
 type HlsPlayerProps = {
   src: string
@@ -20,6 +20,9 @@ function HlsPlayer({ src, channelName, slate, viewer = false }: HlsPlayerProps) 
   const [playingSrc, setPlayingSrc] = useState('')
   // Bumped to reload the source; a stream that isn't up yet keeps being retried.
   const [attempt, setAttempt] = useState(0)
+  // Viewers get sound from the start. A browser that won't autoplay with sound before the visitor
+  // has clicked anything plays muted instead, until the first click, tap or key press.
+  const [soundBlocked, setSoundBlocked] = useState(false)
 
   useEffect(() => {
     if (!src || failedSrc !== src) return
@@ -50,13 +53,22 @@ function HlsPlayer({ src, channelName, slate, viewer = false }: HlsPlayerProps) 
       video.src = src
     }
 
+    // The studio's monitor stays silent; viewers start with sound when the browser allows it.
+    video.muted = !viewer
+    video.play().catch((error: DOMException) => {
+      if (!viewer || error.name !== 'NotAllowedError') return
+      video.muted = true
+      setSoundBlocked(true)
+      void video.play().catch(() => undefined)
+    })
+
     return () => {
       player?.destroy()
       video.pause()
       video.removeAttribute('src')
       video.load()
     }
-  }, [src, attempt])
+  }, [src, attempt, viewer])
 
   const status = !src || failedSrc === src
     ? 'offline'
@@ -70,6 +82,26 @@ function HlsPlayer({ src, channelName, slate, viewer = false }: HlsPlayerProps) 
     offline: 'SIGNAL UNAVAILABLE',
   }[status]
 
+  // The first click, tap or key press anywhere on the page turns the sound on.
+  useEffect(() => {
+    if (!soundBlocked) return
+    const unmute = () => {
+      const video = videoRef.current
+      if (video) {
+        video.muted = false
+        void video.play().catch(() => undefined)
+      }
+      setSoundBlocked(false)
+    }
+    const options = { capture: true, once: true }
+    document.addEventListener('pointerdown', unmute, options)
+    document.addEventListener('keydown', unmute, options)
+    return () => {
+      document.removeEventListener('pointerdown', unmute, options)
+      document.removeEventListener('keydown', unmute, options)
+    }
+  }, [soundBlocked])
+
   const screen = slate ?? (!viewer || status === 'playing'
     ? undefined
     : status === 'offline' ? { title: 'OFF AIR', detail: 'GGTV will be back soon.' } : { title: 'CONNECTING', detail: '' })
@@ -82,9 +114,6 @@ function HlsPlayer({ src, channelName, slate, viewer = false }: HlsPlayerProps) 
         controls={!screen}
         playsInline
         preload="metadata"
-        // Live TV starts muted on its own (browsers allow that), including after a retry.
-        autoPlay
-        muted
         aria-label={`${channelName} live video`}
         onPlaying={() => setPlayingSrc(src)}
         onWaiting={() => setPlayingSrc((current) => current === src ? '' : current)}
@@ -94,6 +123,9 @@ function HlsPlayer({ src, channelName, slate, viewer = false }: HlsPlayerProps) 
       {!screen && (viewer
         ? <img className="player-corner-logo" src="/logo-dark.png" alt="" aria-hidden="true" />
         : <div className="player-corner"><span className="live-dot" /> GGTV / LIVE</div>)}
+      {viewer && soundBlocked && !screen && (
+        <button className="player-sound" type="button"><Volume2 size={15} /> TAP FOR SOUND</button>
+      )}
       {screen ? (
         <div className={`player-state player-slate${screen === slate || status === 'offline' ? '' : ' see-through'}`}>
           <img className="player-logo" src="/logo-dark.png" alt="GGTV" />
