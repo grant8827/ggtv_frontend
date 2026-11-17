@@ -1,5 +1,5 @@
 import { useEffect, useState, type FormEvent } from 'react'
-import { ArrowRight, CircleDot, Radio, Signal, Tv } from 'lucide-react'
+import { CircleDot, Tv } from 'lucide-react'
 import HlsPlayer from './HlsPlayer'
 import { api, formatDay, formatTime, type LiveStatus, type ScheduleEntry } from './api'
 
@@ -10,7 +10,7 @@ const channels = [
 ]
 
 function WatchPage() {
-  const [selectedId, setSelectedId] = useState(channels[0].id)
+  const selectedId = channels[0].id
   const [overrideUrl, setOverrideUrl] = useState<string | null>(null)
   const [draftUrl, setDraftUrl] = useState<string | null>(null)
   const [live, setLive] = useState<LiveStatus | null>(null)
@@ -53,19 +53,13 @@ function WatchPage() {
       ? `Now playing: ${live!.nowPlaying?.itemTitle ?? 'scheduled programming'}`
       : isMainChannel && onNow ? `On the schedule: ${onNow.title}` : 'Live feed from the GGTV origin'
 
-  function selectChannel(channel: (typeof channels)[number]) {
-    setSelectedId(channel.id)
-    setOverrideUrl(null)
-    setDraftUrl(null)
-  }
-
   function connectStream(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     setOverrideUrl((draftUrl ?? streamUrl).trim())
   }
 
   return (
-    <main className="page-wrap">
+    <main className="page-wrap watch-page">
       <div className="eyebrow"><span className="live-dot" /> GGTV BROADCAST NETWORK <span> / </span> VIEWER</div>
       <div className="page-heading">
         <div>
@@ -102,33 +96,12 @@ function WatchPage() {
               <button className="button button-dark" type="submit">CONNECT</button>
             </form>
           </details>
-        </section>
-
-        <aside>
-          <section className="channel-panel">
-            <div className="panel-heading"><h2>Channel lineup</h2><span>{String(channels.length).padStart(2, '0')} FEED{channels.length === 1 ? '' : 'S'}</span></div>
-            <div className="channel-list">
-              {channels.map((channel) => (
-                <button
-                  className={selectedId === channel.id ? 'channel-row selected' : 'channel-row'}
-                  key={channel.id}
-                  type="button"
-                  onClick={() => selectChannel(channel)}
-                  aria-pressed={selectedId === channel.id}
-                >
-                  <span className="channel-number">{channel.id}</span>
-                  <span className="channel-copy"><strong>{channel.name}</strong><small>{channel.detail}</small></span>
-                  {channel.stream ? <Signal className="channel-arrow" size={15} /> : <ArrowRight className="channel-arrow" size={14} />}
-                </button>
-              ))}
-            </div>
-          </section>
 
           <section className="channel-panel schedule-panel">
             <div className="panel-heading"><h2>On the schedule</h2><span>EPG</span></div>
             {schedule && schedule.length > 0 ? (
               <ol className="epg-list">
-                {schedule.slice(0, 6).map((entry) => (
+                {schedule.slice(0, 8).map((entry) => (
                   <li key={entry.id} className={entry === onNow ? 'epg-row current' : 'epg-row'}>
                     <span className="epg-time">{entry === onNow ? 'NOW' : `${formatDay(entry.start)} · ${formatTime(entry.start)}`}</span>
                     <strong>{entry.title}</strong>
@@ -143,9 +116,7 @@ function WatchPage() {
               </div>
             )}
           </section>
-
-          <div className="viewer-note"><Radio size={14} /><span>{live ? { live: `On air since ${formatTime(live.startedAt!)}.`, playlist: 'Scheduled programming is playing.', off: 'The channel is currently off air.' }[live.source] : 'Playback uses HLS. The live origin is not connected yet.'}</span></div>
-        </aside>
+        </section>
       </div>
     </main>
   )

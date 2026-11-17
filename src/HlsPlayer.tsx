@@ -90,7 +90,10 @@ function HlsPlayer({ src, channelName, slate, viewer = false }: HlsPlayerProps) 
         onWaiting={() => setPlayingSrc((current) => current === src ? '' : current)}
         onError={() => setFailedSrc(src)}
       />
-      {!screen && <div className="player-corner"><span className="live-dot" /> GGTV / LIVE</div>}
+      {/* Viewers see the GGTV logo in the corner; the studio's ingest monitor keeps its text tag. */}
+      {!screen && (viewer
+        ? <img className="player-corner-logo" src="/logo-dark.png" alt="" aria-hidden="true" />
+        : <div className="player-corner"><span className="live-dot" /> GGTV / LIVE</div>)}
       {screen ? (
         <div className={`player-state player-slate${screen === slate || status === 'offline' ? '' : ' see-through'}`}>
           <img className="player-logo" src="/logo-dark.png" alt="GGTV" />

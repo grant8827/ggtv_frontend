@@ -26,7 +26,15 @@
 .button-dark { color: white; background: #25332e; }
 .button-danger { color: white; background: #d84b43; }
 .button:disabled { opacity: .45; cursor: not-allowed; transform: none; }
-.watch-layout { display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: 24px; align-items: start; }
+.watch-layout { display: grid; grid-template-columns: minmax(0, 1fr); gap: 24px; align-items: start; }
+/* The viewer page uses the whole window: the player spans the page, but never so tall that the
+   picture runs off the bottom of the screen. The schedule sits underneath it. */
+.watch-page { width: min(2200px, 100%); }
+.watch-page .player-frame { width: min(100%, calc((100svh - 110px) * 16 / 9)); margin-inline: auto; }
+.watch-page .player-meta, .watch-page .stream-setup, .watch-page .schedule-panel { width: min(100%, calc((100svh - 110px) * 16 / 9)); margin-inline: auto; }
+.watch-page .epg-list { grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); }
+.watch-page .epg-row { border-right: 1px solid #e9eeea; }
+.player-corner-logo { position: absolute; z-index: 2; top: 2.4%; left: 2%; width: clamp(64px, 11%, 170px); height: auto; filter: drop-shadow(0 2px 6px #000a); pointer-events: none; }
 .viewer-column { min-width: 0; }
 .player-frame { position: relative; overflow: hidden; aspect-ratio: 16 / 9; background: #080d0b; border: 1px solid #27332e; border-radius: 7px; box-shadow: 0 16px 38px #111b1718; }
 .hls-video { display: block; width: 100%; height: 100%; object-fit: contain; background: #080d0b; }
@@ -133,7 +141,6 @@
 .studio-footer span { display: inline-flex; align-items: center; gap: 6px; }
 
 @media (max-width: 920px) {
-  .watch-layout { grid-template-columns: minmax(0, 1fr) 260px; gap: 16px; }
   .studio-lower-grid { grid-template-columns: minmax(0, 1fr); }
 }
 @media (max-width: 700px) {
@@ -148,7 +155,6 @@
   .page-heading { align-items: start; flex-direction: column; margin: 13px 0 18px; }
   .page-heading h1 { font-size: 34px; }
   .heading-actions { width: 100%; }
-  .watch-layout { grid-template-columns: minmax(0, 1fr); }
   .player-meta h2 { font-size: 18px; }
   .player-state span { max-width: 220px; padding: 0 10px; }
   .studio-page { padding: 23px 12px 36px; }
