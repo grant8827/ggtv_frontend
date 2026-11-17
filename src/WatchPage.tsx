@@ -63,7 +63,7 @@ function WatchPage() {
       <div className="eyebrow"><span className="live-dot" /> GGTV BROADCAST NETWORK <span> / </span> VIEWER</div>
       <div className="page-heading">
         <div>
-          <h1>Live television, <span className="heading-accent">in focus.</span></h1>
+          <h1>(GGTV) <span className="heading-accent">Good Gospel Television</span></h1>
           <p>A direct line to what’s happening now.</p>
         </div>
       </div>
