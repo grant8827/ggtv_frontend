@@ -73,18 +73,31 @@ function LogoTab({ saved, onSaved }: { saved: LogoSettings; onSaved: (settings: 
   }
   const changed = JSON.stringify(logo) !== JSON.stringify(saved)
 
-  async function save(event: FormEvent) {
-    event.preventDefault()
+  async function send(next: LogoSettings, done: string) {
     setBusy(true)
     setMessage('')
     try {
-      onSaved(await api<StreamSettings>('/studio/settings/logo', { method: 'PUT', body: logo }))
-      setMessage('Saved. Every screen shows the new placement within a few seconds.')
+      const result = await api<StreamSettings>('/studio/settings/logo', { method: 'PUT', body: next })
+      onSaved(result)
+      setLogo(result.logo)
+      setMessage(done)
     } catch (caught) {
       setMessage(errorMessage(caught))
     } finally {
       setBusy(false)
     }
+  }
+
+  function save(event: FormEvent) {
+    event.preventDefault()
+    void send(logo, 'Saved. Every screen shows the new placement within a few seconds.')
+  }
+
+  // The switch takes effect straight away, keeping the saved placement for when it's turned back on.
+  function toggle() {
+    const enabled = !saved.enabled
+    setLogo({ ...saved, enabled })
+    void send({ ...saved, enabled }, enabled ? 'Logo on. It appears on every screen within a few seconds.' : 'Logo off. Every screen drops it within a few seconds.')
   }
 
   // The preview uses the same numbers as the server: percentages of the video width.
@@ -101,14 +114,23 @@ function LogoTab({ saved, onSaved }: { saved: LogoSettings; onSaved: (settings: 
       <div className="control-panel-heading"><h2><Image size={14} /> Channel logo</h2><span>WEBSITE · TV APPS · CHANNEL FEED</span></div>
       <div className="logo-settings">
         <div className="logo-preview" aria-label="Logo placement preview">
-          {logo.enabled && <img src="/logo-dark.png" alt="" style={previewStyle} />}
+          {logo.enabled
+            ? <img src="/logo-dark.png" alt="" style={previewStyle} />
+            : <span className="logo-preview-off">NO LOGO ON SCREEN</span>}
           {logo.position === 'top-right' && <span className="logo-preview-note">The break countdown also shows here</span>}
         </div>
         <div className="graphics-form">
-          <label className="logo-toggle">
-            <input type="checkbox" checked={logo.enabled} onChange={(event) => change({ enabled: event.target.checked })} />
-            Show the logo on the channel
-          </label>
+          <button
+            type="button"
+            role="switch"
+            aria-checked={saved.enabled}
+            className={saved.enabled ? 'logo-switch on' : 'logo-switch'}
+            onClick={toggle}
+            disabled={busy}
+          >
+            <span className="logo-switch-track"><span className="logo-switch-knob" /></span>
+            <span>{saved.enabled ? 'Logo is ON for every screen' : 'Logo is OFF for every screen'}</span>
+          </button>
           <fieldset className="logo-positions" disabled={!logo.enabled}>
             <legend className="field-label">Position</legend>
             {POSITIONS.map(({ value, label }) => (
@@ -229,7 +251,7 @@ function SettingsPage() {
         </div>
       )}
 
-      {settings && tab === 'logo' && <LogoTab key={JSON.stringify(settings.logo)} saved={settings.logo} onSaved={apply} />}
+      {settings && tab === 'logo' && <LogoTab saved={settings.logo} onSaved={apply} />}
 
       {settings && live && tab === 'stream' && (
         <>
