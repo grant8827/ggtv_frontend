@@ -41,6 +41,17 @@ export type StudioLive = LiveStatus & {
   restream: Record<RestreamPlatform, RestreamStatus>
 }
 
+// Streaming settings. A blank URL uses the server's default (shown in `defaults`).
+export type StreamSettings = {
+  hlsBaseUrl: string
+  rtmpIngestUrl: string
+  defaults: { hlsBaseUrl: string; rtmpIngestUrl: string }
+  liveHlsUrl: string
+  playoutHlsUrl: string
+  streamName: string
+  live: StudioLive
+}
+
 // A break plays its own videos once, interrupting whatever is on, then hands back.
 export type ScheduleKind = 'live' | 'playlist' | 'break'
 

@@ -345,3 +345,8 @@
 .studio-sound-alert { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin: 16px 24px 0; padding: 10px 14px; color: #f2dfbe; background: #3a2c17; border: 1px solid #6b4f24; border-radius: 6px; font-size: 13px; }
 .studio-sound-alert span { flex: 1; min-width: 200px; }
 .guest-sound-button { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); z-index: 2; }
+
+/* Settings page */
+.settings-hint { color: var(--muted); font: 400 10px/1.5 var(--mono); text-transform: none; overflow-wrap: anywhere; }
+.settings-subhead { display: flex; align-items: center; gap: 8px; margin: 0; font: 700 12px var(--display); }
+.settings-subhead small { color: var(--muted); font: 9px var(--mono); }

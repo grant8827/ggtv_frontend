@@ -1,5 +1,5 @@
 import { NavLink, Outlet } from 'react-router-dom'
-import { CalendarClock, ExternalLink, LayoutDashboard, ListVideo, LogOut, Mic, MonitorPlay, RadioTower, Users, Volume2 } from 'lucide-react'
+import { CalendarClock, ExternalLink, LayoutDashboard, ListVideo, LogOut, Mic, MonitorPlay, RadioTower, Settings, Users, Volume2 } from 'lucide-react'
 import { useAuth } from '../auth'
 import { useSwitcher } from './switcherContext'
 
@@ -10,6 +10,7 @@ const links = [
   { to: '/studio/schedule', label: 'Schedule', icon: CalendarClock },
   { to: '/studio/playlists', label: 'Playlists', icon: ListVideo },
   { to: '/studio/guests', label: 'Guests', icon: Users },
+  { to: '/studio/settings', label: 'Settings', icon: Settings },
 ]
 
 function StudioLayout() {

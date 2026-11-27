@@ -16,6 +16,7 @@ import PreviewPage from './studio/PreviewPage'
 import SchedulePage from './studio/SchedulePage'
 import PlaylistsPage from './studio/PlaylistsPage'
 import GuestsPage from './studio/GuestsPage'
+import SettingsPage from './studio/SettingsPage'
 import GuestPage from './GuestPage'
 
 function ViewerLayout() {
@@ -69,6 +70,7 @@ function App() {
           <Route path="schedule" element={<SchedulePage />} />
           <Route path="playlists" element={<PlaylistsPage />} />
           <Route path="guests" element={<GuestsPage />} />
+          <Route path="settings" element={<SettingsPage />} />
           <Route path="*" element={<Navigate to="/studio" replace />} />
         </Route>
         <Route element={<ViewerLayout />}>
