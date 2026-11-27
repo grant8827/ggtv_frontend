@@ -1,6 +1,6 @@
 import { useEffect, useState, type FormEvent } from 'react'
-import { KeyRound, Plug, Radio, Share2, Tv } from 'lucide-react'
-import { api, errorMessage, type RestreamPlatform, type StreamSettings, type StudioLive } from '../api'
+import { Image, KeyRound, Plug, Radio, Share2, Tv } from 'lucide-react'
+import { api, errorMessage, type LogoPosition, type LogoSettings, type RestreamPlatform, type StreamSettings, type StudioLive } from '../api'
 import { useSwitcher } from './switcherContext'
 import CopyField from './CopyField'
 
@@ -56,7 +56,101 @@ function RestreamSettings({ platform, live, onSaved }: { platform: RestreamPlatf
   )
 }
 
+const POSITIONS: { value: LogoPosition; label: string }[] = [
+  { value: 'top-left', label: 'Top left' },
+  { value: 'top-right', label: 'Top right' },
+  { value: 'bottom-left', label: 'Bottom left' },
+  { value: 'bottom-right', label: 'Bottom right' },
+]
+
+function LogoTab({ saved, onSaved }: { saved: LogoSettings; onSaved: (settings: StreamSettings) => void }) {
+  const [logo, setLogo] = useState(saved)
+  const [busy, setBusy] = useState(false)
+  const [message, setMessage] = useState('')
+  const change = (next: Partial<LogoSettings>) => {
+    setLogo((current) => ({ ...current, ...next }))
+    setMessage('')
+  }
+  const changed = JSON.stringify(logo) !== JSON.stringify(saved)
+
+  async function save(event: FormEvent) {
+    event.preventDefault()
+    setBusy(true)
+    setMessage('')
+    try {
+      onSaved(await api<StreamSettings>('/studio/settings/logo', { method: 'PUT', body: logo }))
+      setMessage('Saved. Every screen shows the new placement within a few seconds.')
+    } catch (caught) {
+      setMessage(errorMessage(caught))
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  // The preview uses the same numbers as the server: percentages of the video width.
+  const [vertical, horizontal] = logo.position.split('-')
+  const previewStyle = {
+    width: `${logo.size}%`,
+    opacity: logo.opacity / 100,
+    [vertical]: `${(logo.margin * 16) / 9}%`,
+    [horizontal]: `${logo.margin}%`,
+  }
+
+  return (
+    <form className="control-panel" onSubmit={(event) => void save(event)}>
+      <div className="control-panel-heading"><h2><Image size={14} /> Channel logo</h2><span>WEBSITE · TV APPS · CHANNEL FEED</span></div>
+      <div className="logo-settings">
+        <div className="logo-preview" aria-label="Logo placement preview">
+          {logo.enabled && <img src="/logo-dark.png" alt="" style={previewStyle} />}
+          {logo.position === 'top-right' && <span className="logo-preview-note">The break countdown also shows here</span>}
+        </div>
+        <div className="graphics-form">
+          <label className="logo-toggle">
+            <input type="checkbox" checked={logo.enabled} onChange={(event) => change({ enabled: event.target.checked })} />
+            Show the logo on the channel
+          </label>
+          <fieldset className="logo-positions" disabled={!logo.enabled}>
+            <legend className="field-label">Position</legend>
+            {POSITIONS.map(({ value, label }) => (
+              <button
+                key={value}
+                type="button"
+                className={logo.position === value ? 'button button-primary' : 'button button-muted'}
+                aria-pressed={logo.position === value}
+                onClick={() => change({ position: value })}
+              >
+                {label.toUpperCase()}
+              </button>
+            ))}
+          </fieldset>
+          <label className="field-label">Size · {logo.size}% of the screen width
+            <input type="range" min={5} max={30} step={0.5} value={logo.size} disabled={!logo.enabled} onChange={(event) => change({ size: Number(event.target.value) })} />
+          </label>
+          <label className="field-label">Distance from the edge · {logo.margin}%
+            <input type="range" min={0} max={10} step={0.5} value={logo.margin} disabled={!logo.enabled} onChange={(event) => change({ margin: Number(event.target.value) })} />
+          </label>
+          <label className="field-label">Opacity · {logo.opacity}%
+            <input type="range" min={20} max={100} step={5} value={logo.opacity} disabled={!logo.enabled} onChange={(event) => change({ opacity: Number(event.target.value) })} />
+          </label>
+          <p className="settings-hint">
+            The logo is drawn into the channel itself, so the website, every TV app and the cable feed show it in the same place.
+            Saving restarts the channel feed, which shows as a cut of a few seconds.
+          </p>
+          <div className="graphics-actions">
+            <button className="button button-primary" type="submit" disabled={busy || !changed}>SAVE LOGO</button>
+            <button className="button button-muted" type="button" disabled={busy || !changed} onClick={() => setLogo(saved)}>UNDO CHANGES</button>
+          </div>
+          {message && <p className="studio-message" role="status">{message}</p>}
+        </div>
+      </div>
+    </form>
+  )
+}
+
+type Tab = 'stream' | 'logo'
+
 function SettingsPage() {
+  const [tab, setTab] = useState<Tab>('stream')
   const { setLive } = useSwitcher()
   const [settings, setSettings] = useState<StreamSettings | null>(null)
   const [hlsBaseUrl, setHlsBaseUrl] = useState('')
@@ -125,7 +219,19 @@ function SettingsPage() {
 
       {!settings && <p className="empty-note">{message || 'Loading settings…'}</p>}
 
-      {settings && live && (
+      {settings && (
+        <div className="settings-tabs" role="tablist" aria-label="Settings sections">
+          {([['stream', 'Stream'], ['logo', 'Logo']] as const).map(([id, label]) => (
+            <button key={id} type="button" role="tab" aria-selected={tab === id} className={tab === id ? 'settings-tab active' : 'settings-tab'} onClick={() => setTab(id)}>
+              {label}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {settings && tab === 'logo' && <LogoTab key={JSON.stringify(settings.logo)} saved={settings.logo} onSaved={apply} />}
+
+      {settings && live && tab === 'stream' && (
         <>
           <form className="control-panel" onSubmit={(event) => void save(event)}>
             <div className="control-panel-heading"><h2><Tv size={14} /> Stream URLs</h2><span>WEBSITE · TV APPS · ENCODERS</span></div>

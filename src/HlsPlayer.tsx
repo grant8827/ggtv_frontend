@@ -119,10 +119,8 @@ function HlsPlayer({ src, channelName, slate, viewer = false }: HlsPlayerProps) 
         onWaiting={() => setPlayingSrc((current) => current === src ? '' : current)}
         onError={() => setFailedSrc(src)}
       />
-      {/* Viewers see the GGTV logo in the corner; the studio's ingest monitor keeps its text tag. */}
-      {!screen && (viewer
-        ? <img className="player-corner-logo" src="/logo-dark.png" alt="" aria-hidden="true" />
-        : <div className="player-corner"><span className="live-dot" /> GGTV / LIVE</div>)}
+      {/* The channel feed carries the GGTV logo itself (Studio → Settings → Logo); the studio's ingest monitor keeps its text tag. */}
+      {!screen && !viewer && <div className="player-corner"><span className="live-dot" /> GGTV / LIVE</div>}
       {viewer && soundBlocked && !screen && (
         <button className="player-sound" type="button"><Volume2 size={15} /> TAP FOR SOUND</button>
       )}

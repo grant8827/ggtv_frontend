@@ -350,3 +350,17 @@
 .settings-hint { color: var(--muted); font: 400 10px/1.5 var(--mono); text-transform: none; overflow-wrap: anywhere; }
 .settings-subhead { display: flex; align-items: center; gap: 8px; margin: 0; font: 700 12px var(--display); }
 .settings-subhead small { color: var(--muted); font: 9px var(--mono); }
+
+.settings-tabs { display: flex; gap: 4px; margin-bottom: 14px; border-bottom: 1px solid var(--line); }
+.settings-tab { margin-bottom: -1px; padding: 9px 16px; border: 1px solid transparent; border-bottom: 0; border-radius: 6px 6px 0 0; color: var(--muted); background: none; font: 700 11px var(--mono); text-transform: uppercase; cursor: pointer; }
+.settings-tab.active { color: var(--ink); background: white; border-color: var(--line); }
+.logo-settings { display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(260px, 1fr); gap: 18px; align-items: start; }
+.logo-preview { position: relative; aspect-ratio: 16 / 9; overflow: hidden; border-radius: 4px; background: linear-gradient(135deg, #2c3a34, #101614); }
+.logo-preview img { position: absolute; height: auto; filter: drop-shadow(0 2px 6px #000a); }
+.logo-preview-note { position: absolute; top: 8px; left: 8px; padding: 3px 7px; color: white; background: #0008; border-radius: 3px; font: 9px var(--mono); }
+.logo-toggle { display: flex; align-items: center; gap: 8px; font-size: 12px; }
+.logo-positions { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin: 0; padding: 0; border: 0; }
+.logo-positions legend { margin-bottom: 5px; }
+.logo-positions .button { min-height: 33px; font-size: 9px; }
+.logo-settings input[type="range"] { width: 100%; accent-color: var(--signal-dark); }
+@media (max-width: 900px) { .logo-settings { grid-template-columns: minmax(0, 1fr); } }

@@ -41,6 +41,12 @@ export type StudioLive = LiveStatus & {
   restream: Record<RestreamPlatform, RestreamStatus>
 }
 
+export type LogoPosition = 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right'
+
+// Where the GGTV logo is drawn on the channel feed every screen plays.
+// size and margin are % of the video width; opacity is 20-100.
+export type LogoSettings = { enabled: boolean; position: LogoPosition; size: number; opacity: number; margin: number }
+
 // Streaming settings. A blank URL uses the server's default (shown in `defaults`).
 export type StreamSettings = {
   hlsBaseUrl: string
@@ -52,6 +58,7 @@ export type StreamSettings = {
   // What the channel feed is sending: the live show or playlist ('relay'), or the off-air slate.
   channelFeed: { source: 'starting' | 'relay' | 'slate'; error: string | null; since: string | null }
   streamName: string
+  logo: LogoSettings
   live: StudioLive
 }
 
