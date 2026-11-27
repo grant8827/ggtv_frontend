@@ -159,6 +159,11 @@
   .heading-actions { width: 100%; }
   .player-meta h2 { font-size: 18px; }
   .player-state span { max-width: 220px; padding: 0 10px; }
+  /* On phones the viewer is just the channel: no schedule, and the player runs edge to edge. */
+  .watch-page { padding-inline: 0; }
+  .watch-page .eyebrow, .watch-page .page-heading, .watch-page .player-meta, .watch-page .stream-setup { padding-inline: 14px; }
+  .watch-page .player-frame { width: 100%; border-inline: 0; border-radius: 0; }
+  .watch-page .schedule-panel { display: none; }
   .studio-page { padding: 23px 12px 36px; }
   .studio-heading { align-items: start; flex-direction: column; }
   .studio-heading h1 { font-size: 28px; }
