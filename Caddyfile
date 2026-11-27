@@ -17,6 +17,19 @@
 		reverse_proxy {$BACKEND_URL:http://localhost:3001}
 	}
 
+	# HLS video from SRS over Railway's private network, so streams play from this domain
+	# (https://www.ggtvja.com/live/ggtv.m3u8). Set SRS_URL to the infra service's private
+	# address, e.g. http://ggtv-infra.railway.internal:8080.
+	handle /live/* {
+		@playlist path *.m3u8
+		header @playlist Cache-Control "no-cache"
+		header Access-Control-Allow-Origin "*"
+		reverse_proxy {$SRS_URL:http://localhost:8080} {
+			header_down -Access-Control-Allow-Origin
+			header_down -Server
+		}
+	}
+
 	header -Server
 	header X-Content-Type-Options "nosniff"
 	root * /srv

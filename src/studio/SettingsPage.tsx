@@ -1,5 +1,5 @@
 import { useEffect, useState, type FormEvent } from 'react'
-import { KeyRound, Plug, Share2, Tv } from 'lucide-react'
+import { KeyRound, Plug, Radio, Share2, Tv } from 'lucide-react'
 import { api, errorMessage, type RestreamPlatform, type StreamSettings, type StudioLive } from '../api'
 import { useSwitcher } from './switcherContext'
 import CopyField from './CopyField'
@@ -148,6 +148,21 @@ function SettingsPage() {
               {message && <p className="studio-message" role="status">{message}</p>}
             </div>
           </form>
+
+          <section className="control-panel dash-section">
+            <div className="control-panel-heading"><h2><Radio size={14} /> Channel feed</h2><span>FOR CABLE COMPANIES AND PARTNERS</span></div>
+            <div className="graphics-form">
+              <CopyField label="Channel URL (HLS)" value={settings.channelHlsUrl} />
+              <p className="empty-note">
+                One address that always carries what is on air: the live show while you are live, the playlist otherwise, and a black slate when nothing is scheduled.
+                The address stays the same when you switch between playlist and live; the switch shows as a short cut of a few seconds.
+              </p>
+              <p className="settings-hint">
+                Now sending: {settings.channelFeed.source === 'relay' ? (live.isLive ? 'the live show' : 'the playlist') : settings.channelFeed.source === 'slate' ? 'the off-air slate' : 'starting…'}
+                {settings.channelFeed.error && ` · last error: ${settings.channelFeed.error}`}
+              </p>
+            </div>
+          </section>
 
           <section className="control-panel dash-section">
             <div className="control-panel-heading"><h2><Plug size={14} /> Current addresses</h2><span>COPY INTO YOUR APPS AND ENCODER</span></div>
