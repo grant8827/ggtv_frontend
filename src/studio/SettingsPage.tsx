@@ -153,6 +153,7 @@ function SettingsPage() {
             <div className="control-panel-heading"><h2><Radio size={14} /> Channel feed</h2><span>FOR CABLE COMPANIES AND PARTNERS</span></div>
             <div className="graphics-form">
               <CopyField label="Channel URL (HLS)" value={settings.channelHlsUrl} />
+              <p className="settings-hint">To change this address, set the Playback URL in Stream URLs above (e.g. https://stream.ggtvja.com/live) and save.</p>
               <p className="empty-note">
                 One address that always carries what is on air: the live show while you are live, the playlist otherwise, and a black slate when nothing is scheduled.
                 The address stays the same when you switch between playlist and live; the switch shows as a short cut of a few seconds.
