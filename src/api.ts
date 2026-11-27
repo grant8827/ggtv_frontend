@@ -48,6 +48,9 @@ export type StreamSettings = {
   defaults: { hlsBaseUrl: string; rtmpIngestUrl: string }
   liveHlsUrl: string
   playoutHlsUrl: string
+  channelHlsUrl: string
+  // What the channel feed is sending: the live show or playlist ('relay'), or the off-air slate.
+  channelFeed: { source: 'starting' | 'relay' | 'slate'; error: string | null; since: string | null }
   streamName: string
   live: StudioLive
 }
