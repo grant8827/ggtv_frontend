@@ -1,37 +1,10 @@
 import { useEffect, useState, type FormEvent } from 'react'
 import { Link } from 'react-router-dom'
-import { Copy, Eye, EyeOff, KeyRound, Plug, RadioTower, Square } from 'lucide-react'
+import { KeyRound, Plug, RadioTower, Square } from 'lucide-react'
 import { api, errorMessage, formatTime, type StudioLive } from '../api'
 import HlsPlayer from '../HlsPlayer'
 import { useSwitcher } from './switcherContext'
-
-function CopyField({ label, value, secret = false }: { label: string; value: string; secret?: boolean }) {
-  const [revealed, setRevealed] = useState(!secret)
-  const [copied, setCopied] = useState(false)
-
-  async function copy() {
-    await navigator.clipboard.writeText(value).catch(() => undefined)
-    setCopied(true)
-    window.setTimeout(() => setCopied(false), 1500)
-  }
-
-  return (
-    <label className="field-label">{label}
-      <span className="copy-field">
-        <input className="text-input" readOnly value={revealed ? value : '•'.repeat(24)} />
-        {secret && (
-          <button className="dash-icon-button light" type="button" onClick={() => setRevealed((current) => !current)} aria-label={revealed ? 'Hide' : 'Show'}>
-            {revealed ? <EyeOff size={14} /> : <Eye size={14} />}
-          </button>
-        )}
-        <button className="dash-icon-button light" type="button" onClick={() => void copy()} aria-label={`Copy ${label}`}>
-          <Copy size={14} />
-        </button>
-      </span>
-      {copied && <small className="copy-note">Copied</small>}
-    </label>
-  )
-}
+import CopyField from './CopyField'
 
 function PreviewPage() {
   const [live, setLive] = useState<StudioLive | null>(null)
